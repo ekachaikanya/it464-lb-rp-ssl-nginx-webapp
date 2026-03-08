@@ -1,0 +1,1741 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>v3 · Nginx · Stateful/Stateless · SSL/TLS · Load Balancer</title>
+<link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;600;700;800&family=Google+Sans&family=Google+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:      #050810;
+  --s1:      #090d1a;
+  --s2:      #0d1224;
+  --line:    #131c35;
+  --ink:     #d4e0f8;
+  --dim:     #4a6090;
+  --faint:   #1a2840;
+
+  --cyan:    #00e5ff;
+  --green:   #00ff9d;
+  --gold:    #ffb800;
+  --red:     #ff3d6b;
+  --violet:  #b06cff;
+  --blue:    #3d8eff;
+  --teal:    #00c9b1;
+  --nginx:   #009639;
+
+  --r: 12px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:'Google Sans';
+  font-size:24px;
+  line-height:1.75;
+  overflow-x:hidden;
+}
+/* noise overlay */
+body::after{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  opacity:.4;
+}
+/* grid */
+body::before{
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(rgba(0,229,255,.018) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,229,255,.018) 1px,transparent 1px);
+  background-size:48px 48px;
+}
+.wrap{max-width:1100px;margin:0 auto;padding:0 28px;position:relative;z-index:1}
+
+/* ── HEADER ── */
+header{padding:80px 0 56px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+header::before{
+  content:'';position:absolute;top:-60px;right:-80px;
+  width:600px;height:600px;border-radius:50%;
+  background:radial-gradient(ellipse,rgba(0,229,255,.04) 0%,transparent 70%);
+  pointer-events:none;
+}
+.ver-badge{
+  display:inline-flex;align-items:center;gap:8px;
+  background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.2);
+  border-radius:6px;padding:5px 14px;
+  font-family:'Google Sans';font-size:20px;
+  color:var(--cyan);letter-spacing:2px;
+  text-transform:uppercase;margin-bottom:24px;
+}
+.ver-badge::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--cyan);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+header h1{
+  font-family:'Google Sans';
+  font-size:clamp(2rem,5vw,3.8rem);
+  font-weight:800;line-height:1.1;letter-spacing:-1.5px;
+  color:#fff;margin-bottom:18px;
+}
+header h1 .g{
+  background:linear-gradient(135deg,var(--cyan) 0%,var(--green) 50%,var(--teal) 100%);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+}
+header h1 .o{color:var(--gold)}
+.sub{color:var(--dim);max-width:660px;font-size:1rem;margin-bottom:32px;line-height:1.8}
+
+.tag-row{display:flex;flex-wrap:wrap;gap:8px}
+.tag{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--s1);border:1px solid var(--line);
+  border-radius:6px;padding:5px 12px;
+  font-family:'Google Sans';font-size:20px;color:var(--dim);
+}
+.dot{width:6px;height:6px;border-radius:50%}
+.dc{background:var(--cyan);box-shadow:0 0 5px var(--cyan)}
+.dg{background:var(--green);box-shadow:0 0 5px var(--green)}
+.dg2{background:var(--gold);box-shadow:0 0 5px var(--gold)}
+.dr{background:var(--red);box-shadow:0 0 5px var(--red)}
+.dv{background:var(--violet);box-shadow:0 0 5px var(--violet)}
+
+/* ── NAV ── */
+nav{
+  position:sticky;top:0;z-index:50;
+  background:rgba(5,8,16,.92);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--line);
+}
+.nav-i{
+  max-width:1100px;margin:0 auto;padding:0 28px;
+  display:flex;gap:4px;overflow-x:auto;padding-block:10px;
+  scrollbar-width:none;
+}
+.nav-i::-webkit-scrollbar{display:none}
+.nb{
+  white-space:nowrap;
+  background:transparent;border:1px solid transparent;
+  border-radius:6px;padding:5px 12px;
+  color:var(--dim);font-family:'Google Sans';font-size:20px;
+  cursor:pointer;transition:all .18s;letter-spacing:.5px;
+}
+.nb:hover,.nb.on{background:rgba(0,229,255,.07);border-color:rgba(0,229,255,.2);color:var(--cyan)}
+
+/* ── SECTIONS ── */
+section{padding:70px 0;border-bottom:1px solid var(--line)}
+.stag{
+  font-family:'Google Sans';font-size:20px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--faint);margin-bottom:10px;
+  display:flex;align-items:center;gap:8px;
+}
+.stag::before{content:'';width:20px;height:1px;background:var(--dim)}
+h2{font-family:'Google Sans';font-size:clamp(1.5rem,3vw,2.1rem);font-weight:800;color:#fff;letter-spacing:-0.5px;margin-bottom:12px}
+.slead{color:var(--dim);max-width:700px;margin-bottom:44px;line-height:1.8}
+
+/* ── DIAGRAM BOX ── */
+.dbox{
+  background:var(--s1);border:1px solid var(--line);
+  border-radius:16px;padding:32px 28px;overflow-x:auto;margin:28px 0;
+}
+.dlabel{
+  font-family:'Google Sans';font-size:20px;
+  letter-spacing:3px;text-transform:uppercase;
+  color:var(--dim);margin-bottom:22px;
+  display:flex;align-items:center;gap:8px;
+}
+.dlabel::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);animation:blink 2s infinite}
+
+/* ── CODE ── */
+.cw{background:#030610;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:18px 0}
+.cb{
+  background:var(--s2);border-bottom:1px solid var(--line);
+  padding:9px 16px;display:flex;align-items:center;gap:8px;
+}
+.dots2{display:flex;gap:5px}
+.d2{width:10px;height:10px;border-radius:50%}
+.dr2{background:#ff5f57}.dy2{background:#ffbd2e}.dg2b{background:#28c840}
+.fn{font-family:'Google Sans';font-size:20px;color:var(--dim);flex:1}
+.fl{
+  font-family:'Google Sans';font-size:20px;
+  color:var(--cyan);background:rgba(0,229,255,.07);
+  border:1px solid rgba(0,229,255,.18);padding:2px 8px;border-radius:4px;
+}
+pre{
+  padding:20px 22px;overflow-x:auto;
+  font-family:'Google Sans';font-size:20px;line-height:1.9;color:var(--ink);
+}
+.kw{color:#c792ea}.str{color:#c3e88d}.num{color:#f78c6c}
+.cm{color:#2d4560;font-style:italic}.nd{color:#82aaff}
+.nv{color:#c3e88d}.nb2{color:var(--gold)}.yk{color:var(--cyan)}.yv{color:#c3e88d}
+.ph{color:#8892bf}.hl{background:rgba(0,229,255,.06);display:block;margin:0 -22px;padding:0 22px}
+
+/* ── BOXES ── */
+.box{border-radius:var(--r);padding:16px 20px;margin:18px 0;font-size:.9rem;border-left:3px solid}
+.bx-c{background:rgba(0,229,255,.04);border-color:var(--cyan)}
+.bx-g{background:rgba(0,255,157,.04);border-color:var(--green)}
+.bx-y{background:rgba(255,184,0,.04);border-color:var(--gold)}
+.bx-r{background:rgba(255,61,107,.04);border-color:var(--red)}
+.bx-v{background:rgba(176,108,255,.04);border-color:var(--violet)}
+.box strong{color:#fff}
+
+/* ── STEPS ── */
+.steps{display:flex;flex-direction:column;gap:12px;margin:22px 0}
+.step{
+  display:flex;gap:14px;align-items:flex-start;
+  background:var(--s1);border:1px solid var(--line);
+  border-radius:var(--r);padding:15px 18px;transition:border-color .2s;
+}
+.step:hover{border-color:rgba(0,229,255,.2)}
+.sn{
+  width:30px;height:30px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Google Sans';font-weight:700;font-size:20px;
+}
+.sc2{background:rgba(0,229,255,.08);border:1px solid rgba(0,229,255,.2);color:var(--cyan)}
+.sg{background:rgba(0,255,157,.08);border:1px solid rgba(0,255,157,.2);color:var(--green)}
+.sy{background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.2);color:var(--gold)}
+.sv{background:rgba(176,108,255,.08);border:1px solid rgba(176,108,255,.2);color:var(--violet)}
+.sc h4{color:#fff;font-size:.9rem;margin-bottom:3px}
+.sc p{color:var(--dim);font-size:.85rem}
+.sc code{font-family:'Google Sans';font-size:.78rem;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:3px;color:var(--cyan)}
+
+/* ── GRID CARDS ── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:24px 0}
+.card{
+  background:var(--s1);border:1px solid var(--line);
+  border-radius:var(--r);padding:20px;position:relative;
+  overflow:hidden;transition:transform .2s,border-color .2s;
+}
+.card:hover{transform:translateY(-3px)}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.card.cc::before{background:linear-gradient(90deg,var(--cyan),transparent)}
+.card.cg::before{background:linear-gradient(90deg,var(--green),transparent)}
+.card.cy::before{background:linear-gradient(90deg,var(--gold),transparent)}
+.card.cv::before{background:linear-gradient(90deg,var(--violet),transparent)}
+.card.cr::before{background:linear-gradient(90deg,var(--red),transparent)}
+.card:hover.cc{border-color:rgba(0,229,255,.3)}
+.card:hover.cg{border-color:rgba(0,255,157,.3)}
+.card:hover.cy{border-color:rgba(255,184,0,.3)}
+.card:hover.cv{border-color:rgba(176,108,255,.3)}
+.ci{font-size:1.8rem;margin-bottom:10px}
+.ct{color:#fff;font-weight:700;font-size:.95rem;margin-bottom:6px}
+.cd{color:var(--dim);font-size:.84rem;line-height:1.6}
+.cp{
+  display:inline-block;margin-top:10px;
+  font-family:'Google Sans';font-size:20px;
+  padding:2px 8px;border-radius:4px;
+}
+.pcc{background:rgba(0,229,255,.08);color:var(--cyan);border:1px solid rgba(0,229,255,.2)}
+.pcg{background:rgba(0,255,157,.08);color:var(--green);border:1px solid rgba(0,255,157,.2)}
+.pcy{background:rgba(255,184,0,.08);color:var(--gold);border:1px solid rgba(255,184,0,.2)}
+.pcv{background:rgba(176,108,255,.08);color:var(--violet);border:1px solid rgba(176,108,255,.2)}
+
+/* ── COMPARE TABLE ── */
+.tbl{width:100%;border-collapse:separate;border-spacing:0;margin:20px 0;border-radius:var(--r);overflow:hidden;border:1px solid var(--line)}
+.tbl th{background:var(--s2);padding:12px 18px;text-align:left;font-family:'Google Sans';font-size:20px;color:var(--dim);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.tbl td{padding:12px 18px;border-bottom:1px solid rgba(19,28,53,.6);font-size:.875rem}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:nth-child(even) td{background:rgba(13,18,36,.5)}
+.chk{color:var(--green)}.xmark{color:var(--red)}.warn{color:var(--gold)}
+
+/* ── FILE TREE ── */
+.ftree{
+  font-family:'Google Sans';font-size:20px;line-height:2.1;
+  background:var(--s1);border:1px solid var(--line);border-radius:var(--r);
+  padding:20px 24px;margin:18px 0;
+}
+.ftd{color:var(--cyan)}.ftf{color:var(--ink)}.ftc{color:var(--faint)}.ftn{color:var(--green)}
+
+/* ── TERMINAL ── */
+.term{background:#020508;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin:18px 0}
+.tbar{background:var(--s2);border-bottom:1px solid var(--line);padding:9px 16px;display:flex;align-items:center;gap:8px}
+.tbody{padding:18px 22px;font-family:'Google Sans';font-size:20px;line-height:1.9}
+.t${color:var(--green)}.tc{color:#fff}.to{color:var(--dim)}.tu{color:var(--cyan);text-decoration:underline}
+.ts{color:var(--gold)}.te{color:var(--red)}
+
+/* ── SSL HANDSHAKE SPECIAL ── */
+.handshake-step{
+  display:flex;gap:12px;align-items:center;
+  padding:10px 14px;border-radius:8px;
+  background:var(--s1);border:1px solid var(--line);
+  margin-bottom:8px;transition:all .2s;
+}
+.handshake-step:hover{border-color:rgba(0,229,255,.2);background:rgba(0,229,255,.03)}
+.hs-num{
+  width:26px;height:26px;border-radius:6px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Google Sans';font-size:20px;font-weight:700;
+}
+.hs-arrow{color:var(--dim);font-family:'Google Sans';font-size:20px;white-space:nowrap}
+.hs-desc{font-size:.85rem;color:var(--ink);flex:1}
+.hs-detail{color:var(--dim);font-size:.78rem}
+
+/* ── SESSION FLOW PILL ── */
+.flow-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  background:var(--s2);border:1px solid var(--line);
+  border-radius:999px;padding:4px 12px;
+  font-family:'Google Sans';font-size:20px;
+}
+.flow-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:10px 0}
+.flow-arr{color:var(--dim);font-size:20px}
+
+/* ── KNOW-MORE CARDS ── */
+.know-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin:28px 0}
+.know-card{
+  background:var(--s1);border:1px solid var(--line);
+  border-radius:var(--r);padding:22px;
+}
+.kc-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.kc-icon{font-size:1.5rem}
+.kc-title{color:#fff;font-weight:700;font-size:.95rem}
+.kc-body{color:var(--dim);font-size:.84rem;line-height:1.7}
+.kc-body code{font-family:'Google Sans';font-size:.78rem;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:3px;color:var(--cyan)}
+
+/* ── RESPONSIVE ── */
+@media(max-width:680px){section{padding:44px 0}.dbox{padding:14px 10px}pre{font-size:20px}}
+
+/* ── ANIMATIONS ── */
+.appear{opacity:0;transform:translateY(16px);animation:up .5s ease forwards}
+.d1{animation-delay:.1s}.d2{animation-delay:.2s}.d3{animation-delay:.3s}.d4{animation-delay:.4s}
+@keyframes up{to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══════════════════════════════════════════ -->
+<header>
+<div class="wrap">
+  <div class="ver-badge">Version 3 · Advanced Topics</div>
+  <h1>
+    <span class="g">Stateful · Stateless</span><br>
+    <span class="o">SSL/TLS</span> &amp; สิ่งที่ควรรู้
+  </h1>
+  <p class="sub">เจาะลึก session management, ปัญหาของ stateful app กับ Load Balancer, 
+  การทำ SSL/TLS termination ด้วย self-signed cert บน Nginx Docker และแนวคิดสำคัญในงานจริง</p>
+  <div class="tag-row">
+    <div class="tag"><span class="dot dc"></span>SSL/TLS Self-Signed</div>
+    <div class="tag"><span class="dot dg"></span>Stateless vs Stateful</div>
+    <div class="tag"><span class="dot dg2"></span>Redis Session Store</div>
+    <div class="tag"><span class="dot dv"></span>HTTPS :443 / :8443</div>
+    <div class="tag"><span class="dot dr"></span>PHP Sessions</div>
+  </div>
+</div>
+</header>
+
+<!-- ═══ NAV ═══════════════════════════════════════════════ -->
+<nav>
+<div class="nav-i">
+  <button class="nb on" onclick="goTo('stateless')">01 · Stateless/Stateful</button>
+  <button class="nb" onclick="goTo('session-problem')">02 · Session Problem</button>
+  <button class="nb" onclick="goTo('solutions')">03 · Solutions</button>
+  <button class="nb" onclick="goTo('ssl-concepts')">04 · SSL/TLS Concepts</button>
+  <button class="nb" onclick="goTo('ssl-termination')">05 · SSL Termination</button><br><br>
+ </div>
+ <div class="nav-i">
+  <button class="nb" onclick="goTo('ssl-handshake')">06 · TLS Handshake</button>
+  <button class="nb" onclick="goTo('configs')">07 · Configs</button>
+  <button class="nb" onclick="goTo('compose')">08 · Docker Compose</button>
+  <button class="nb" onclick="goTo('run')">09 · Run &amp; Test</button>
+  <button class="nb" onclick="goTo('mustknow')">10 · Must Know</button>
+</div>
+</nav>
+
+<!-- ═══ 01: STATELESS vs STATEFUL ═══════════════════════ -->
+<section id="stateless">
+<div class="wrap">
+  <div class="stag">01 · Core Concepts</div>
+  <h2>Stateless vs Stateful</h2>
+  <p class="slead">ก่อนเข้าใจปัญหากับ Load Balancer ต้องเข้าใจก่อนว่า application ของเราเก็บ "สถานะ" ไว้ที่ไหน</p>
+
+  <div class="cgrid">
+    <div class="card cg appear d1">
+      <div class="ci">🧊</div>
+      <div class="ct">Stateless Application</div>
+      <div class="cd">ทุก request ประมวลผลได้ด้วยตัวเอง ไม่ต้องอาศัยข้อมูลจาก request ก่อนหน้า server ไม่เก็บข้อมูล user ไว้</div>
+      <span class="cp pcg">ง่ายต่อการ scale</span>
+    </div>
+    <div class="card cv appear d3">
+      <div class="ci">🔥</div>
+      <div class="ct">Stateful Application</div>
+      <div class="cd">server เก็บข้อมูล user state ไว้ใน memory หรือ disk (session) request ถัดไปต้องการข้อมูลเดิม</div>
+      <span class="cp pcv">ท้าทายต่อการ scale</span>
+    </div>
+    <div class="card cy appear d3">
+      <div class="ci">🌊</div>
+      <div class="ct">Hybrid (ทั่วไปที่สุด)</div>
+      <div class="cd">Business logic เป็น stateless แต่ใช้ external state store (Redis, DB) เก็บ session ทำให้ scale ได้</div>
+      <span class="cp pcy">Best practice</span>
+    </div>
+  </div>
+
+  <!-- Comparison Table -->
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>ลักษณะ</th>
+        <th>Stateless</th>
+        <th>Stateful</th>
+        <th>Hybrid</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>เก็บ session ที่ไหน</td>
+        <td><span class="chk">✓</span> ไม่เก็บ / client side</td>
+        <td><span class="xmark">✗</span> Server memory</td>
+        <td><span class="chk">✓</span> External store (Redis)</td>
+      </tr>
+      <tr>
+        <td>Load Balancer</td>
+        <td><span class="chk">✓</span> ทุก algorithm ใช้ได้</td>
+        <td><span class="xmark">✗</span> ต้องใช้ ip_hash</td>
+        <td><span class="chk">✓</span> ทุก algorithm ใช้ได้</td>
+      </tr>
+      <tr>
+        <td>Horizontal Scale</td>
+        <td><span class="chk">✓</span> เพิ่ม server ได้ทันที</td>
+        <td><span class="xmark">✗</span> ซับซ้อนมาก</td>
+        <td><span class="chk">✓</span> เพิ่มได้ง่าย</td>
+      </tr>
+      <tr>
+        <td>Server Crash</td>
+        <td><span class="chk">✓</span> ไม่สูญเสียข้อมูล</td>
+        <td><span class="xmark">✗</span> Session หาย logout</td>
+        <td><span class="chk">✓</span> Session ยังอยู่ใน Redis</td>
+      </tr>
+      <tr>
+        <td>ตัวอย่าง</td>
+        <td>REST API + JWT, Static sites</td>
+        <td>PHP session default, Classic ASP</td>
+        <td>PHP + Redis session, Node + Redis</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- DIAGRAM: stateless vs stateful -->
+  <div class="dbox">
+    <div class="dlabel">Stateless vs Stateful — State Storage Comparison</div>
+    <svg viewBox="0 0 880 240" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Google Sans">
+      <defs>
+        <marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00ff9d"/></marker>
+        <marker id="a2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#ff3d6b"/></marker>
+        <marker id="a3" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#ffb800"/></marker>
+      </defs>
+
+      <!-- ── STATELESS (left) ── -->
+      <rect x="10" y="10" width="265" height="220" rx="12"
+            fill="rgba(0,255,157,.02)" stroke="rgba(0,255,157,.15)" stroke-width="1" stroke-dasharray="5,4"/>
+      <text x="25" y="30" fill="rgba(0,255,157,.5)" font-size="20" letter-spacing="2">STATELESS</text>
+
+      <rect x="20" y="40" width="70" height="50" rx="8" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="55" y="63" text-anchor="middle" font-size="20">💻</text>
+      <text x="55" y="80" text-anchor="middle" fill="#d4e0f8" font-size="9">Client</text>
+      <text x="55" y="91" text-anchor="middle" fill="#4a6090" font-size="8">+JWT token</text>
+
+      <line x1="90" y1="65" x2="120" y2="65" stroke="#00ff9d" stroke-width="1.5" marker-end="url(#a1)"/>
+      <text x="105" y="58" text-anchor="middle" fill="#00ff9d" font-size="8">req+JWT</text>
+
+      <rect x="124" y="40" width="60" height="50" rx="8" fill="#0a1510" stroke="#009639" stroke-width="1.5"/>
+      <text x="154" y="63" text-anchor="middle" font-size="14">⚡</text>
+      <text x="154" y="80" text-anchor="middle" fill="#00ff9d" font-size="9">Server</text>
+
+      <text x="154" y="108" text-anchor="middle" fill="#4a6090" font-size="9">JWT ยืนยันตัวตน</text>
+      <text x="154" y="120" text-anchor="middle" fill="#00ff9d" font-size="9">✓ stateless</text>
+
+      <rect x="20" y="140" width="245" height="40" rx="8"
+            fill="rgba(0,255,157,.04)" stroke="rgba(0,255,157,.2)" stroke-width="1"/>
+      <text x="142" y="155" text-anchor="middle" fill="#00ff9d" font-size="10">Server ไม่ต้องจำอะไร</text>
+      <text x="142" y="170" text-anchor="middle" fill="#4a6090" font-size="9">State อยู่ใน JWT token ฝั่ง client</text>
+
+      <!-- Can go to any server -->
+      <rect x="20" y="190" width="245" height="30" rx="6"
+            fill="rgba(0,255,157,.06)" stroke="rgba(0,255,157,.15)" stroke-width="1"/>
+      <text x="142" y="209" text-anchor="middle" fill="#00ff9d" font-size="9">✓ ส่งไป server ไหนก็ได้ — LB ไม่มีปัญหา</text>
+
+      <!-- ── STATEFUL (right) ── -->
+      <rect x="300" y="10" width="265" height="220" rx="12"
+            fill="rgba(255,61,107,.02)" stroke="rgba(255,61,107,.15)" stroke-width="1" stroke-dasharray="5,4"/>
+      <text x="315" y="30" fill="rgba(255,61,107,.5)" font-size="10" letter-spacing="2">STATEFUL (problem!)</text>
+
+      <rect x="310" y="40" width="70" height="50" rx="8" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="345" y="63" text-anchor="middle" font-size="14">💻</text>
+      <text x="345" y="80" text-anchor="middle" fill="#d4e0f8" font-size="9">Client</text>
+      <text x="345" y="91" text-anchor="middle" fill="#4a6090" font-size="8">session_id cookie</text>
+
+      <line x1="380" y1="65" x2="410" y2="65" stroke="#ff3d6b" stroke-width="1.5" marker-end="url(#a2)"/>
+      <text x="395" y="58" text-anchor="middle" fill="#ff3d6b" font-size="8">req+cookie</text>
+
+      <rect x="414" y="40" width="60" height="50" rx="8" fill="#1a0810" stroke="#ff3d6b" stroke-width="1.5"/>
+      <text x="444" y="55" text-anchor="middle" font-size="12">⚡</text>
+      <text x="444" y="68" text-anchor="middle" fill="#ff3d6b" font-size="9">Server 1</text>
+      <rect x="422" y="74" width="44" height="14" rx="3" fill="rgba(255,61,107,.15)" stroke="rgba(255,61,107,.3)" stroke-width="1"/>
+      <text x="444" y="84" text-anchor="middle" fill="#ff3d6b" font-size="8">session[user]</text>
+
+      <!-- server2 no session = problem -->
+      <rect x="484" y="40" width="60" height="50" rx="8" fill="#090d1a" stroke="#2d4060" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="514" y="55" text-anchor="middle" font-size="12" opacity=".4">⚡</text>
+      <text x="514" y="68" text-anchor="middle" fill="#4a6090" font-size="9">Server 2</text>
+      <text x="514" y="84" text-anchor="middle" fill="#2d4060" font-size="8">ไม่มี session!</text>
+
+      <!-- warning -->
+      <text x="444" y="108" text-anchor="middle" fill="#4a6090" font-size="9">ถ้า LB ส่งไป Server 2</text>
+      <rect x="310" y="117" width="245" height="22" rx="6" fill="rgba(255,61,107,.08)" stroke="rgba(255,61,107,.25)" stroke-width="1"/>
+      <text x="432" y="131" text-anchor="middle" fill="#ff3d6b" font-size="9">⚠ Session ไม่พบ → User ถูก logout!</text>
+
+      <rect x="310" y="145" width="245" height="40" rx="8"
+            fill="rgba(255,61,107,.04)" stroke="rgba(255,61,107,.15)" stroke-width="1"/>
+      <text x="432" y="160" text-anchor="middle" fill="#ff3d6b" font-size="10">Session เก็บใน Server 1 memory</text>
+      <text x="432" y="174" text-anchor="middle" fill="#4a6090" font-size="9">Request ถัดไปต้องไปหา Server 1 เสมอ</text>
+
+      <rect x="310" y="192" width="245" height="28" rx="6"
+            fill="rgba(255,61,107,.06)" stroke="rgba(255,61,107,.15)" stroke-width="1"/>
+      <text x="432" y="206" text-anchor="middle" fill="#ff3d6b" font-size="9">✗ ต้องใช้ ip_hash / sticky session</text>
+      <text x="432" y="217" text-anchor="middle" fill="#4a6090" font-size="8">หรือ external session store</text>
+
+      <!-- ── HYBRID solution hint ── -->
+      <rect x="590" y="10" width="280" height="220" rx="12"
+            fill="rgba(255,184,0,.02)" stroke="rgba(255,184,0,.15)" stroke-width="1" stroke-dasharray="5,4"/>
+      <text x="605" y="30" fill="rgba(255,184,0,.5)" font-size="10" letter-spacing="2">HYBRID (solution)</text>
+
+      <rect x="600" y="40" width="60" height="40" rx="8" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="630" y="57" text-anchor="middle" font-size="12">💻</text>
+      <text x="630" y="72" text-anchor="middle" fill="#d4e0f8" font-size="9">Client</text>
+
+      <line x1="660" y1="60" x2="690" y2="60" stroke="#ffb800" stroke-width="1.5" marker-end="url(#a3)"/>
+
+      <rect x="694" y="40" width="55" height="40" rx="8" fill="#0d0a00" stroke="#ffb800" stroke-width="1.5"/>
+      <text x="721" y="57" text-anchor="middle" font-size="12">⚖️</text>
+      <text x="721" y="72" text-anchor="middle" fill="#ffb800" font-size="9">LB</text>
+
+      <!-- Servers -->
+      <rect x="600" y="100" width="50" height="40" rx="6" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="625" y="118" text-anchor="middle" font-size="11">⚡</text>
+      <text x="625" y="132" text-anchor="middle" fill="#d4e0f8" font-size="8">app1</text>
+
+      <rect x="660" y="100" width="50" height="40" rx="6" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="685" y="118" text-anchor="middle" font-size="11">⚡</text>
+      <text x="685" y="132" text-anchor="middle" fill="#d4e0f8" font-size="8">app2</text>
+
+      <rect x="720" y="100" width="50" height="40" rx="6" fill="#090d1a" stroke="#131c35" stroke-width="1"/>
+      <text x="745" y="118" text-anchor="middle" font-size="11">⚡</text>
+      <text x="745" y="132" text-anchor="middle" fill="#d4e0f8" font-size="8">app3</text>
+
+      <line x1="721" y1="80" x2="625" y2="98" stroke="#ffb800" stroke-width="1" marker-end="url(#a3)"/>
+      <line x1="721" y1="80" x2="685" y2="98" stroke="#ffb800" stroke-width="1" marker-end="url(#a3)"/>
+      <line x1="721" y1="80" x2="745" y2="98" stroke="#ffb800" stroke-width="1" marker-end="url(#a3)"/>
+
+      <!-- Redis -->
+      <rect x="640" y="158" width="110" height="52" rx="10"
+            fill="rgba(255,61,107,.06)" stroke="rgba(255,61,107,.3)" stroke-width="1.5"/>
+      <text x="695" y="178" text-anchor="middle" font-size="16">🗄️</text>
+      <text x="695" y="195" text-anchor="middle" fill="#ff3d6b" font-size="10" font-weight="bold">Redis</text>
+      <text x="695" y="206" text-anchor="middle" fill="#4a6090" font-size="8">Shared Sessions</text>
+
+      <!-- Lines to redis -->
+      <line x1="625" y1="140" x2="665" y2="157" stroke="#4a6090" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="685" y1="140" x2="688" y2="157" stroke="#4a6090" stroke-width="1" stroke-dasharray="3,3"/>
+      <line x1="745" y1="140" x2="722" y2="157" stroke="#4a6090" stroke-width="1" stroke-dasharray="3,3"/>
+
+      <rect x="595" y="218" width="275" height="10" rx="3" fill="rgba(255,184,0,.06)"/>
+      <text x="732" y="227" text-anchor="middle" fill="#ffb800" font-size="8">✓ Any server อ่าน session จาก Redis ได้</text>
+    </svg>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 02: SESSION PROBLEM ═══════════════════════════════ -->
+<section id="session-problem">
+<div class="wrap">
+  <div class="stag">02 · The Problem</div>
+  <h2>Session Problem กับ Load Balancer</h2>
+  <p class="slead">ปัญหาคลาสสิกที่เจอทุก project เมื่อเพิ่ม Load Balancer เข้าไปใน stateful app แบบเดิม</p>
+
+  <!-- PROBLEM DIAGRAM -->
+  <div class="dbox">
+    <div class="dlabel">Session Stickiness Problem — Why Default LB Breaks Sessions</div>
+    <svg viewBox="0 0 860 300" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Google Sans">
+      <defs>
+        <marker id="ok" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00ff9d"/></marker>
+        <marker id="bad" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#ff3d6b"/></marker>
+        <marker id="lb2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#ffb800"/></marker>
+      </defs>
+
+      <!-- Timeline header -->
+      <text x="10" y="20" fill="#4a6090" font-size="10" letter-spacing="2">TIME →</text>
+      <line x1="10" y1="26" x2="850" y2="26" stroke="#131c35" stroke-width="1"/>
+
+      <!-- REQUEST 1 -->
+      <rect x="10" y="35" width="840" height="1" fill="#0d1224"/>
+
+      <!-- Step labels -->
+      <rect x="10" y="38" width="58" height="20" rx="4" fill="rgba(0,255,157,.1)" stroke="rgba(0,255,157,.25)" stroke-width="1"/>
+      <text x="39" y="52" text-anchor="middle" fill="#00ff9d" font-size="9">Request 1</text>
+      <text x="80" y="52" fill="#4a6090" font-size="9">Login → POST /login → session_start() → $_SESSION['user']='alice'</text>
+
+      <!-- flow: client → LB → server1 (login) -->
+      <rect x="10" y="66" width="40" height="30" rx="6" fill="#090d1a" stroke="#131c35"/>
+      <text x="30" y="85" text-anchor="middle" font-size="12">💻</text>
+
+      <line x1="50" y1="81" x2="88" y2="81" stroke="#00ff9d" stroke-width="1.5" marker-end="url(#ok)"/>
+
+      <rect x="92" y="66" width="44" height="30" rx="6" fill="#0d0a00" stroke="#ffb800"/>
+      <text x="114" y="81" text-anchor="middle" font-size="10">⚖️</text>
+      <text x="114" y="92" text-anchor="middle" fill="#ffb800" font-size="7">LB</text>
+
+      <line x1="136" y1="81" x2="174" y2="81" stroke="#00ff9d" stroke-width="1.5" marker-end="url(#ok)"/>
+      <text x="155" y="74" text-anchor="middle" fill="#00ff9d" font-size="8">→ server1</text>
+
+      <rect x="178" y="60" width="70" height="42" rx="6" fill="#0a1510" stroke="#00ff9d" stroke-width="1.5"/>
+      <text x="213" y="79" text-anchor="middle" fill="#00ff9d" font-size="10" font-weight="bold">server1</text>
+      <rect x="186" y="83" width="55" height="12" rx="3" fill="rgba(0,255,157,.12)" stroke="rgba(0,255,157,.3)"/>
+      <text x="213" y="92" text-anchor="middle" fill="#00ff9d" font-size="8">session: alice✓</text>
+
+      <text x="270" y="76" fill="#4a6090" font-size="9">Set-Cookie: PHPSESSID=abc123</text>
+      <text x="270" y="89" fill="#00ff9d" font-size="9">✓ Login สำเร็จ! Session เก็บใน server1 memory</text>
+
+      <!-- REQUEST 2 -->
+      <line x1="10" y1="115" x2="850" y2="115" stroke="#131c35" stroke-width="1" stroke-dasharray="4,4"/>
+      <rect x="10" y="118" width="58" height="20" rx="4" fill="rgba(255,184,0,.1)" stroke="rgba(255,184,0,.25)" stroke-width="1"/>
+      <text x="39" y="132" text-anchor="middle" fill="#ffb800" font-size="9">Request 2</text>
+      <text x="80" y="132" fill="#4a6090" font-size="9">GET /dashboard → Cookie: PHPSESSID=abc123 → LB เลือก server2 (round-robin)</text>
+
+      <rect x="10" y="144" width="40" height="30" rx="6" fill="#090d1a" stroke="#131c35"/>
+      <text x="30" y="163" text-anchor="middle" font-size="12">💻</text>
+      <text x="30" y="173" text-anchor="middle" fill="#4a6090" font-size="7">abc123</text>
+
+      <line x1="50" y1="159" x2="88" y2="159" stroke="#ffb800" stroke-width="1.5" marker-end="url(#lb2)"/>
+
+      <rect x="92" y="144" width="44" height="30" rx="6" fill="#0d0a00" stroke="#ffb800"/>
+      <text x="114" y="159" text-anchor="middle" font-size="10">⚖️</text>
+
+      <line x1="136" y1="159" x2="174" y2="175" stroke="#ff3d6b" stroke-width="1.5" marker-end="url(#bad)"/>
+      <text x="148" y="153" text-anchor="middle" fill="#ff3d6b" font-size="8">→ server2 !</text>
+
+      <rect x="178" y="138" width="70" height="42" rx="6" fill="#090d1a" stroke="#131c35" stroke-dasharray="4,3"/>
+      <text x="213" y="157" text-anchor="middle" fill="#4a6090" font-size="10">server2</text>
+      <text x="213" y="171" text-anchor="middle" fill="#2d4060" font-size="8">ไม่มี session!</text>
+
+      <!-- ERROR -->
+      <rect x="257" y="143" width="320" height="34" rx="8" fill="rgba(255,61,107,.06)" stroke="rgba(255,61,107,.3)" stroke-width="1"/>
+      <text x="265" y="158" fill="#ff3d6b" font-size="10" font-weight="bold">⚠ Session ไม่พบ!</text>
+      <text x="265" y="171" fill="#4a6090" font-size="9">server2 ไม่รู้ว่า abc123 คือใคร → redirect ไป /login</text>
+
+      <!-- REQUEST 3 with ip_hash -->
+      <line x1="10" y1="195" x2="850" y2="195" stroke="#131c35" stroke-width="1" stroke-dasharray="4,4"/>
+      <rect x="10" y="198" width="58" height="20" rx="4" fill="rgba(0,229,255,.1)" stroke="rgba(0,229,255,.25)" stroke-width="1"/>
+      <text x="39" y="212" text-anchor="middle" fill="#00e5ff" font-size="9">ip_hash fix</text>
+      <text x="80" y="208" fill="#4a6090" font-size="9">ใช้ ip_hash algorithm → Client IP เดิมไปหา server เดิมเสมอ</text>
+
+      <rect x="10" y="222" width="40" height="30" rx="6" fill="#090d1a" stroke="#00e5ff"/>
+      <text x="30" y="241" text-anchor="middle" font-size="12">💻</text>
+      <text x="30" y="251" text-anchor="middle" fill="#00e5ff" font-size="7">IP fixed</text>
+
+      <line x1="50" y1="237" x2="88" y2="237" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ok)"/>
+
+      <rect x="92" y="222" width="44" height="30" rx="6" fill="#001522" stroke="#00e5ff"/>
+      <text x="114" y="237" text-anchor="middle" font-size="10">⚖️</text>
+      <text x="114" y="248" text-anchor="middle" fill="#00e5ff" font-size="7">ip_hash</text>
+
+      <line x1="136" y1="237" x2="174" y2="237" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ok)"/>
+      <text x="155" y="230" text-anchor="middle" fill="#00e5ff" font-size="8">→ server1</text>
+
+      <rect x="178" y="216" width="70" height="42" rx="6" fill="#0a1510" stroke="#00e5ff" stroke-width="1.5"/>
+      <text x="213" y="235" text-anchor="middle" fill="#00e5ff" font-size="10" font-weight="bold">server1</text>
+      <rect x="186" y="249" width="55" height="8" rx="3" fill="rgba(0,229,255,.1)" stroke="rgba(0,229,255,.3)"/>
+      <text x="213" y="256" text-anchor="middle" fill="#00e5ff" font-size="8">session: alice✓</text>
+
+      <text x="257" y="232" fill="#4a6090" font-size="9">Client IP เดิม → server1 เสมอ → session found ✓</text>
+      <rect x="257" y="237" width="360" height="18" rx="4" fill="rgba(0,229,255,.04)" stroke="rgba(0,229,255,.15)" stroke-width="1"/>
+      <text x="265" y="249" fill="#00e5ff" font-size="9">⚠ แต่: ถ้า server1 down → session หาย, scale ไม่สะดวก → ใช้ Redis ดีกว่า</text>
+
+      <!-- Legend bottom -->
+      <rect x="10" y="277" width="840" height="1" fill="#131c35"/>
+      <text x="10" y="293" fill="#2d4060" font-size="9">แก้ปัญหาที่ดีที่สุด: External Session Store (Redis) — ทุก server อ่าน session ร่วมกันได้</text>
+    </svg>
+  </div>
+
+  <div class="box bx-r">
+    <strong>⚠ ปัญหาที่พบบ่อย:</strong> นักพัฒนา PHP มักเจอปัญหานี้ตอนเพิ่ม server ครั้งแรก 
+    ใช้งานได้ปกติบน single server แต่พอใส่ LB แล้ว user ถูก logout สุ่มเรื่อยๆ 
+    เพราะ <code>session_start()</code> ของ PHP เก็บไฟล์ session ไว้บน server นั้นๆ
+  </div>
+</div>
+</section>
+
+<!-- ═══ 03: SOLUTIONS ═════════════════════════════════════ -->
+<section id="solutions">
+<div class="wrap">
+  <div class="stag">03 · Solutions</div>
+  <h2>วิธีแก้ปัญหา Session กับ LB</h2>
+  <p class="slead">มี 3 วิธีหลักที่ใช้กันในงานจริง แต่ละวิธีมี trade-off ต่างกัน</p>
+
+  <div class="cgrid">
+    <div class="card cy">
+      <div class="ci">📌</div>
+      <div class="ct">1. Sticky Session (ip_hash)</div>
+      <div class="cd">Nginx ใช้ IP ของ Client เป็น key hash ให้ Client IP เดิมไปหา Server เดิมเสมอ ง่ายสุด แต่ LB ไม่สมดุลถ้า Client ส่วนใหญ่มา IP เดียวกัน</div>
+      <span class="cp pcy">nginx: ip_hash</span>
+    </div>
+    <div class="card cc">
+      <div class="ci">🗄️</div>
+      <div class="ct">2. Shared Session Store (Redis)</div>
+      <div class="cd">ทุก server เก็บและอ่าน session จาก Redis ร่วมกัน Server ไหน down ก็ไม่กระทบ Scale ได้อิสระ นี่คือ <strong>best practice</strong></div>
+      <span class="cp pcc">Redis + PHP session handler</span>
+    </div>
+    <div class="card cg">
+      <div class="ci">🔑</div>
+      <div class="ct">3. Stateless Token (JWT)</div>
+      <div class="cd">ไม่เก็บ session บน server เลย ใช้ JWT token ที่ client เก็บ server แค่ verify signature ไม่ต้องการ store ใดๆ</div>
+      <span class="cp pcg">Modern REST API</span>
+    </div>
+  </div>
+
+  <!-- Redis solution detail -->
+  <div class="dbox">
+    <div class="dlabel">Solution: Redis Shared Session Store</div>
+    <svg viewBox="0 0 860 200" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Google Sans">
+      <defs>
+        <marker id="ar" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00e5ff"/></marker>
+        <marker id="ard" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#ff3d6b"/></marker>
+        <filter id="gl"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      <!-- Browser -->
+      <rect x="10" y="70" width="80" height="65" rx="8" fill="#090d1a" stroke="#131c35" stroke-width="1.5"/>
+      <text x="50" y="98" text-anchor="middle" font-size="16">💻</text>
+      <text x="50" y="113" text-anchor="middle" fill="#d4e0f8" font-size="10">Browser</text>
+      <text x="50" y="126" text-anchor="middle" fill="#4a6090" font-size="8">PHPSESSID=xyz</text>
+
+      <line x1="90" y1="102" x2="130" y2="102" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ar)"/>
+      <text x="110" y="95" text-anchor="middle" fill="#00e5ff" font-size="8">request</text>
+      <circle r="5" fill="#00e5ff"><animateMotion path="M90,102 L130,102" dur="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" values="0;1;1;0" dur="1.5s" repeatCount="indefinite"/></circle>
+
+      <!-- LB -->
+      <rect x="134" y="78" width="60" height="50" rx="8" fill="#0d0a00" stroke="#ffb800" stroke-width="1.5" filter="url(#gl)"/>
+      <text x="164" y="100" text-anchor="middle" font-size="18">⚖️</text>
+      <text x="164" y="116" text-anchor="middle" fill="#ffb800" font-size="9">nginx-lb</text>
+      <text x="164" y="127" text-anchor="middle" fill="#4a6090" font-size="7">least_conn</text>
+
+      <!-- LB to servers -->
+      <line x1="194" y1="95" x2="268" y2="66" stroke="#ffb800" stroke-width="1.3" marker-end="url(#ar)" stroke-dasharray="4,2"/>
+      <line x1="194" y1="103" x2="268" y2="103" stroke="#ffb800" stroke-width="1.3" marker-end="url(#ar)" stroke-dasharray="4,2"/>
+      <line x1="194" y1="113" x2="268" y2="142" stroke="#ffb800" stroke-width="1.3" marker-end="url(#ar)" stroke-dasharray="4,2"/>
+
+      <!-- App servers -->
+      <rect x="272" y="45" width="90" height="42" rx="8" fill="#0a1510" stroke="#00ff9d" stroke-width="1.5"/>
+      <text x="317" y="62" text-anchor="middle" font-size="11">🐘</text>
+      <text x="317" y="76" text-anchor="middle" fill="#00ff9d" font-size="9">app1 (PHP)</text>
+      <text x="317" y="84" text-anchor="middle" fill="#4a6090" font-size="7">no local sessions</text>
+
+      <rect x="272" y="82" width="90" height="42" rx="8" fill="#0a1510" stroke="#00ff9d" stroke-width="1.5"/>
+      <text x="317" y="99" text-anchor="middle" font-size="11">🐘</text>
+      <text x="317" y="113" text-anchor="middle" fill="#00ff9d" font-size="9">app2 (PHP)</text>
+      <text x="317" y="121" text-anchor="middle" fill="#4a6090" font-size="7">no local sessions</text>
+
+      <rect x="272" y="122" width="90" height="42" rx="8" fill="#0a1510" stroke="#00ff9d" stroke-width="1.5"/>
+      <text x="317" y="139" text-anchor="middle" font-size="11">🐘</text>
+      <text x="317" y="153" text-anchor="middle" fill="#00ff9d" font-size="9">app3 (PHP)</text>
+      <text x="317" y="161" text-anchor="middle" fill="#4a6090" font-size="7">no local sessions</text>
+
+      <!-- Redis arrows (bidirectional) -->
+      <line x1="362" y1="66" x2="450" y2="90" stroke="#ff3d6b" stroke-width="1.5" marker-end="url(#ard)"/>
+      <line x1="362" y1="103" x2="450" y2="103" stroke="#ff3d6b" stroke-width="1.5" marker-end="url(#ard)"/>
+      <line x1="362" y1="143" x2="450" y2="116" stroke="#ff3d6b" stroke-width="1.5" marker-end="url(#ard)"/>
+
+      <text x="405" y="82" text-anchor="middle" fill="#ff3d6b" font-size="8">READ/WRITE</text>
+      <text x="405" y="92" text-anchor="middle" fill="#ff3d6b" font-size="8">session</text>
+
+      <!-- Redis -->
+      <rect x="454" y="70" width="120" height="70" rx="10" fill="rgba(255,61,107,.06)" stroke="#ff3d6b" stroke-width="2" filter="url(#gl)"/>
+      <text x="514" y="100" text-anchor="middle" font-size="22">🗄️</text>
+      <text x="514" y="118" text-anchor="middle" fill="#ff3d6b" font-size="11" font-weight="bold">Redis</text>
+      <text x="514" y="131" text-anchor="middle" fill="#4a6090" font-size="8">Shared Session Store</text>
+
+      <!-- Session data in Redis -->
+      <rect x="590" y="55" width="260" height="100" rx="10" fill="rgba(255,61,107,.03)" stroke="rgba(255,61,107,.15)" stroke-width="1"/>
+      <text x="600" y="72" fill="rgba(255,61,107,.4)" font-size="9" letter-spacing="2">SESSION DATA (KEY-VALUE)</text>
+      <text x="600" y="90" fill="#ff3d6b" font-size="10" font-family="monospace">PHPREDIS_SESSION:xyz</text>
+      <text x="600" y="105" fill="#4a6090" font-size="9">"user":"alice"</text>
+      <text x="600" y="118" fill="#4a6090" font-size="9">"cart":[item1,item2]</text>
+      <text x="600" y="131" fill="#4a6090" font-size="9">"role":"admin"</text>
+      <text x="600" y="144" fill="#4a6090" font-size="9">TTL: 1440s (24min)</text>
+
+      <!-- PHP config note -->
+      <text x="10" y="185" fill="#2d4060" font-size="9">php.ini: session.save_handler=redis | session.save_path="tcp://redis:6379"</text>
+    </svg>
+  </div>
+
+  <!-- PHP Redis session config -->
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">app/www/session-demo.php</span><span class="fl">php</span>
+    </div>
+    <pre><span class="ph">&lt;?php</span>
+<span class="cm">// ── กำหนดให้ PHP ใช้ Redis เก็บ session ─────────────────────────</span>
+<span class="kw">ini_set</span>(<span class="str">'session.save_handler'</span>, <span class="str">'redis'</span>);
+<span class="kw">ini_set</span>(<span class="str">'session.save_path'</span>,    <span class="str">'tcp://redis:6379'</span>); <span class="cm">// redis container</span>
+
+<span class="kw">session_start</span>();
+
+<span class="kw">$serverName</span> = <span class="ph">getenv</span>(<span class="str">'SERVER_NAME'</span>) ?: <span class="str">'Unknown'</span>;
+<span class="kw">$serverColor</span>= <span class="ph">getenv</span>(<span class="str">'SERVER_COLOR'</span>)?: <span class="str">'#00ff9d'</span>;
+
+<span class="cm">// ── ทดสอบ session ─────────────────────────────────────────────</span>
+<span class="kw">if</span> (!isset(<span class="ph">$_SESSION</span>[<span class="str">'visit_count'</span>])) {
+    <span class="ph">$_SESSION</span>[<span class="str">'visit_count'</span>] = <span class="num">0</span>;
+    <span class="ph">$_SESSION</span>[<span class="str">'first_server'</span>] = <span class="kw">$serverName</span>;
+    <span class="ph">$_SESSION</span>[<span class="str">'started_at'</span>]  = <span class="ph">date</span>(<span class="str">'H:i:s'</span>);
+}
+<span class="ph">$_SESSION</span>[<span class="str">'visit_count'</span>]++;
+<span class="ph">$_SESSION</span>[<span class="str">'last_server'</span>] = <span class="kw">$serverName</span>;
+<span class="ph">$_SESSION</span>[<span class="str">'last_visit'</span>]  = <span class="ph">date</span>(<span class="str">'H:i:s'</span>);
+
+<span class="kw">$count</span>  = <span class="ph">$_SESSION</span>[<span class="str">'visit_count'</span>];
+<span class="kw">$first</span>  = <span class="ph">$_SESSION</span>[<span class="str">'first_server'</span>];
+<span class="kw">$sessId</span> = <span class="ph">session_id</span>();
+<span class="ph">?&gt;</span>
+
+<span class="cm">&lt;!-- แสดงผล: กด F5 หลายครั้ง session count ต้องเพิ่มต่อเนื่อง
+     แม้แต่ละ request จะไปหา server คนละตัว (เพราะ Redis เก็บไว้กลาง) --&gt;</span>
+&lt;h2&gt;Visit #&lt;?= <span class="kw">$count</span> ?&gt; on <span class="ph">&lt;?= $serverName ?&gt;</span>&lt;/h2&gt;
+&lt;p&gt;Session ID: &lt;?= <span class="kw">$sessId</span> ?&gt;&lt;/p&gt;
+&lt;p&gt;First logged in on: &lt;?= <span class="kw">$first</span> ?&gt;&lt;/p&gt;</pre>
+  </div>
+
+  <div class="box bx-g">
+    <strong>✅ ผลลัพธ์ที่คาดหวัง:</strong> กด F5 ซ้ำๆ — แม้แต่ละ request จะไปหา app1, app2, app3 คนละตัว
+    แต่ <code>visit_count</code> ยังคงเพิ่มต่อเนื่อง เพราะทุก server อ่าน session จาก Redis ร่วมกัน
+  </div>
+</div>
+</section>
+
+<!-- ═══ 04: SSL/TLS CONCEPTS ═════════════════════════════ -->
+<section id="ssl-concepts">
+<div class="wrap">
+  <div class="stag">04 · SSL/TLS</div>
+  <h2>SSL/TLS — ทำให้ HTTP กลายเป็น HTTPS</h2>
+  <p class="slead">SSL (Secure Sockets Layer) ถูกแทนที่ด้วย TLS (Transport Layer Security) ที่ปลอดภัยกว่า แต่คนยังคุ้นกับคำว่า SSL ดังนั้นทั้งสองคำหมายถึงสิ่งเดียวกันในการสนทนาทั่วไป</p>
+
+  <div class="cgrid">
+    <div class="card cc">
+      <div class="ci">🔐</div>
+      <div class="ct">Encryption</div>
+      <div class="cd">เข้ารหัสข้อมูลระหว่าง client และ server ไม่มีใครดักอ่านได้กลางทาง แม้จะจับ packet ไปก็เป็นแค่ noise</div>
+      <span class="cp pcc">AES-256-GCM</span>
+    </div>
+    <div class="card cg">
+      <div class="ci">✅</div>
+      <div class="ct">Authentication</div>
+      <div class="cd">Certificate พิสูจน์ตัวตนของ server ว่าคุณกำลังคุยกับ server จริงๆ ไม่ใช่ man-in-the-middle</div>
+      <span class="cp pcg">CA Certificate</span>
+    </div>
+    <div class="card cy">
+      <div class="ci">🔒</div>
+      <div class="ct">Integrity</div>
+      <div class="cd">ตรวจสอบว่าข้อมูลไม่ถูกแก้ไขระหว่างทาง ด้วย MAC (Message Authentication Code)</div>
+      <span class="cp pcy">HMAC-SHA256</span>
+    </div>
+    <div class="card cv">
+      <div class="ci">🤝</div>
+      <div class="ct">TLS Handshake</div>
+      <div class="cd">กระบวนการตกลง cipher suite แลกกุญแจ และยืนยัน certificate ก่อนส่งข้อมูลจริง ใช้เวลา 1-2 round trips</div>
+      <span class="cp pcv">TLS 1.3 = 1-RTT</span>
+    </div>
+  </div>
+
+  <!-- Certificate types -->
+  <h3 style="color:#fff;font-size:1.1rem;margin:32px 0 16px;font-family:'Google Sans'">📜 ประเภทของ Certificate</h3>
+  <table class="tbl">
+    <thead>
+      <tr><th>ประเภท</th><th>ใช้สำหรับ</th><th>ออกโดย</th><th>ราคา</th><th>Browser Trust</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong style="color:var(--gold)">Self-Signed</strong></td>
+        <td>Development, Testing, Internal tools</td>
+        <td>ตัวเอง (openssl)</td>
+        <td>ฟรี</td>
+        <td><span class="xmark">✗</span> Warning</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--green)">Let's Encrypt</strong></td>
+        <td>Public websites (ฟรี)</td>
+        <td>Let's Encrypt CA</td>
+        <td>ฟรี</td>
+        <td><span class="chk">✓</span> Trusted</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--cyan)">DV Certificate</strong></td>
+        <td>Small-medium sites</td>
+        <td>DigiCert, Sectigo</td>
+        <td>~$10-50/yr</td>
+        <td><span class="chk">✓</span> Trusted</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--violet)">OV/EV Certificate</strong></td>
+        <td>Enterprise, Banking</td>
+        <td>DigiCert, GlobalSign</td>
+        <td>$100-500+/yr</td>
+        <td><span class="chk">✓</span> Trusted + Org Info</td>
+      </tr>
+      <tr>
+        <td><strong style="color:var(--teal)">Wildcard (*.domain)</strong></td>
+        <td>ทุก subdomain</td>
+        <td>Any CA</td>
+        <td>$80-200/yr</td>
+        <td><span class="chk">✓</span> Trusted</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="box bx-c">
+    <strong>💡 Demo นี้ใช้ Self-Signed cert:</strong> สร้างด้วย <code>openssl req -x509</code>
+    เหมาะสำหรับ development และ testing Browser จะแสดง "Not Secure" warning แต่การเข้ารหัสทำงานปกติ
+    ใช้ <strong>Let's Encrypt</strong> สำหรับ production จริงๆ
+  </div>
+</div>
+</section>
+
+<!-- ═══ 05: SSL TERMINATION ═══════════════════════════════ -->
+<section id="ssl-termination">
+<div class="wrap">
+  <div class="stag">05 · Where to Decrypt</div>
+  <h2>SSL Termination — ถอดรหัสที่ไหน?</h2>
+  <p class="slead">SSL Termination คือจุดที่รับ HTTPS และแปลงเป็น HTTP ก่อนส่งต่อ ตำแหน่งที่เลือกมีผลต่อ security, performance และ complexity</p>
+
+  <div class="dbox">
+    <div class="dlabel">SSL Termination Strategies Comparison</div>
+    <svg viewBox="0 0 860 280" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Google Sans">
+      <defs>
+        <marker id="ms" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00e5ff"/></marker>
+        <marker id="mh" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#4a6090"/></marker>
+      </defs>
+
+      <!-- Row labels -->
+      <text x="10" y="55" fill="#4a6090" font-size="9" letter-spacing="1">STRATEGY A</text>
+      <text x="10" y="115" fill="#4a6090" font-size="9" letter-spacing="1">STRATEGY B</text>
+      <text x="10" y="190" fill="#4a6090" font-size="9" letter-spacing="1">STRATEGY C</text>
+      <text x="10" y="260" fill="#4a6090" font-size="9" letter-spacing="1">THIS DEMO</text>
+
+      <!-- ── A: Terminate at LB ── -->
+      <text x="80" y="42" fill="#00e5ff" font-size="9" font-weight="bold">Terminate at Load Balancer (most common)</text>
+      <!-- HTTPS -->
+      <rect x="80" y="47" width="55" height="28" rx="5" fill="#090d1a" stroke="#00e5ff"/>
+      <text x="107" y="65" text-anchor="middle" fill="#00e5ff" font-size="10">🌐 Client</text>
+      <line x1="135" y1="61" x2="165" y2="61" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="150" y="55" text-anchor="middle" fill="#00e5ff" font-size="8">HTTPS</text>
+      <text x="150" y="73" text-anchor="middle" fill="#4a6090" font-size="7">🔒 encrypted</text>
+      <rect x="169" y="47" width="70" height="28" rx="5" fill="#0a1510" stroke="#009639" stroke-width="1.5"/>
+      <text x="204" y="65" text-anchor="middle" fill="#00ff9d" font-size="9">⚖️ LB+SSL</text>
+      <line x1="239" y1="61" x2="269" y2="61" stroke="#4a6090" stroke-width="1.5" marker-end="url(#mh)"/>
+      <text x="254" y="55" text-anchor="middle" fill="#4a6090" font-size="8">HTTP</text>
+      <text x="254" y="73" text-anchor="middle" fill="#4a6090" font-size="7">🔓 internal</text>
+      <rect x="273" y="47" width="50" height="28" rx="5" fill="#090d1a" stroke="#131c35"/>
+      <text x="298" y="65" text-anchor="middle" fill="#d4e0f8" font-size="9">app1</text>
+      <rect x="273" y="47" width="50" height="28" rx="5" fill="#090d1a" stroke="#131c35" transform="translate(60,0)"/>
+      <text x="358" y="65" text-anchor="middle" fill="#d4e0f8" font-size="9">app2</text>
+      <text x="430" y="57" fill="#00ff9d" font-size="9">✓ SSL overhead อยู่ที่ LB เดียว</text>
+      <text x="430" y="70" fill="#4a6090" font-size="8">Backend ไม่ต้องจัดการ cert | Internal traffic ไม่ encrypted</text>
+
+      <!-- ── B: Terminate at App ── -->
+      <text x="80" y="102" fill="#ffb800" font-size="9" font-weight="bold">Terminate at Each Application (end-to-end)</text>
+      <rect x="80" y="107" width="55" height="28" rx="5" fill="#090d1a" stroke="#131c35"/>
+      <text x="107" y="125" text-anchor="middle" fill="#d4e0f8" font-size="10">🌐 Client</text>
+      <line x1="135" y1="121" x2="165" y2="121" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="150" y="115" text-anchor="middle" fill="#00e5ff" font-size="8">HTTPS</text>
+      <rect x="169" y="107" width="50" height="28" rx="5" fill="#090d1a" stroke="#131c35"/>
+      <text x="194" y="125" text-anchor="middle" fill="#d4e0f8" font-size="9">⚖️ LB</text>
+      <text x="194" y="133" text-anchor="middle" fill="#4a6090" font-size="7">TCP pass-through</text>
+      <line x1="219" y1="121" x2="249" y2="121" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="234" y="115" text-anchor="middle" fill="#00e5ff" font-size="8">HTTPS</text>
+      <text x="234" y="133" text-anchor="middle" fill="#4a6090" font-size="7">🔒 still encrypted</text>
+      <rect x="253" y="107" width="55" height="28" rx="5" fill="#0a1510" stroke="#009639" stroke-width="1.5"/>
+      <text x="280" y="121" text-anchor="middle" fill="#00ff9d" font-size="9">app+SSL</text>
+      <text x="350" y="115" fill="#ffb800" font-size="9">✓ End-to-end encryption (PCI DSS)</text>
+      <text x="350" y="128" fill="#4a6090" font-size="8">ทุก server ต้องมี cert | CPU overhead สูง</text>
+
+      <!-- ── C: SSL Re-encryption ── -->
+      <text x="80" y="176" fill="#b06cff" font-size="9" font-weight="bold">SSL Re-encryption (terminate + re-encrypt)</text>
+      <rect x="80" y="181" width="55" height="28" rx="5" fill="#090d1a" stroke="#131c35"/>
+      <text x="107" y="199" text-anchor="middle" fill="#d4e0f8" font-size="10">🌐 Client</text>
+      <line x1="135" y1="195" x2="165" y2="195" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="150" y="189" text-anchor="middle" fill="#00e5ff" font-size="8">HTTPS</text>
+      <rect x="169" y="181" width="70" height="28" rx="5" fill="#0d0520" stroke="#b06cff" stroke-width="1.5"/>
+      <text x="204" y="195" text-anchor="middle" fill="#b06cff" font-size="9">LB+SSL</text>
+      <text x="204" y="205" text-anchor="middle" fill="#4a6090" font-size="7">decrypt+re-encrypt</text>
+      <line x1="239" y1="195" x2="269" y2="195" stroke="#b06cff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="254" y="189" text-anchor="middle" fill="#b06cff" font-size="8">HTTPS</text>
+      <text x="254" y="207" text-anchor="middle" fill="#4a6090" font-size="7">🔒 re-encrypted</text>
+      <rect x="273" y="181" width="55" height="28" rx="5" fill="#0a1510" stroke="#009639" stroke-width="1.5"/>
+      <text x="300" y="199" text-anchor="middle" fill="#00ff9d" font-size="9">app+SSL</text>
+      <text x="350" y="188" fill="#b06cff" font-size="9">✓ Secure everywhere, backend uses internal cert</text>
+      <text x="350" y="201" fill="#4a6090" font-size="8">Double encryption overhead | Complex setup</text>
+
+      <!-- ── THIS DEMO ── -->
+      <text x="80" y="246" fill="#00e5ff" font-size="9" font-weight="bold">This Demo: LB Termination (Strategy A) — HTTPS → HTTP internal</text>
+      <rect x="80" y="251" width="55" height="28" rx="5" fill="#090d1a" stroke="#00e5ff"/>
+      <text x="107" y="269" text-anchor="middle" fill="#00e5ff" font-size="9">Browser</text>
+      <line x1="135" y1="265" x2="165" y2="265" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#ms)"/>
+      <text x="150" y="258" fill="#00e5ff" font-size="8">HTTPS:443</text>
+      <rect x="169" y="251" width="70" height="28" rx="5" fill="#0a1510" stroke="#009639" stroke-width="2"/>
+      <text x="204" y="269" text-anchor="middle" fill="#00ff9d" font-size="9">nginx-lb+TLS</text>
+      <line x1="239" y1="265" x2="279" y2="265" stroke="#4a6090" stroke-width="1.5" marker-end="url(#mh)"/>
+      <text x="259" y="258" fill="#4a6090" font-size="8">HTTP:80</text>
+      <rect x="283" y="251" width="50" height="28" rx="5" fill="#090d1a" stroke="#131c35"/>
+      <text x="308" y="269" text-anchor="middle" fill="#d4e0f8" font-size="9">app1,2,3</text>
+      <text x="350" y="258" fill="#00e5ff" font-size="9">:443 (HTTPS) nginx-lb → :80 (HTTP) apps</text>
+      <text x="350" y="271" fill="#4a6090" font-size="8">:8443 (HTTPS) nginx-rp → :80 (HTTP) app1</text>
+    </svg>
+  </div>
+
+  <div class="box bx-v">
+    <strong>🔑 Rule of thumb สำหรับงานจริง:</strong><br>
+    • <strong>Internal network (Docker / Kubernetes)</strong> → SSL Termination at LB ก็เพียงพอ network ภายใน trusted<br>
+    • <strong>Compliance (PCI DSS, HIPAA)</strong> → End-to-end encryption จำเป็น ต้องใช้ Strategy B หรือ C<br>
+    • <strong>Microservices</strong> → มักใช้ mTLS (Mutual TLS) ยืนยันตัวตนทั้งสองฝั่ง
+  </div>
+</div>
+</section>
+
+<!-- ═══ 06: TLS HANDSHAKE ════════════════════════════════ -->
+<section id="ssl-handshake">
+<div class="wrap">
+  <div class="stag">06 · Protocol Deep Dive</div>
+  <h2>TLS Handshake — ขั้นตอนต่อต่อการเข้ารหัส</h2>
+  <p class="slead">ก่อนที่ HTTPS จะส่งข้อมูลได้ต้องผ่าน handshake ก่อน ใน TLS 1.3 ใช้แค่ 1 round trip (เร็วกว่า TLS 1.2 ที่ใช้ 2 RTT)</p>
+
+  <!-- TLS 1.3 handshake diagram -->
+  <div class="dbox">
+    <div class="dlabel">TLS 1.3 Handshake — 1 Round Trip Time (1-RTT)</div>
+    <svg viewBox="0 0 860 320" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Google Sans">
+      <defs>
+        <marker id="hc" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00e5ff"/></marker>
+        <marker id="hs" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#00ff9d"/></marker>
+        <marker id="hd" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3z" fill="#b06cff"/></marker>
+      </defs>
+
+      <!-- Columns -->
+      <rect x="60" y="10" width="120" height="300" rx="8" fill="rgba(0,229,255,.03)" stroke="rgba(0,229,255,.1)" stroke-width="1"/>
+      <text x="120" y="28" text-anchor="middle" fill="#00e5ff" font-size="11" font-weight="bold">Client</text>
+      <text x="120" y="40" text-anchor="middle" fill="#4a6090" font-size="9">Browser</text>
+
+      <rect x="680" y="10" width="120" height="300" rx="8" fill="rgba(0,255,157,.03)" stroke="rgba(0,255,157,.1)" stroke-width="1"/>
+      <text x="740" y="28" text-anchor="middle" fill="#00ff9d" font-size="11" font-weight="bold">Server</text>
+      <text x="740" y="40" text-anchor="middle" fill="#4a6090" font-size="9">nginx-lb</text>
+
+      <!-- Timeline arrows -->
+      <line x1="120" y1="50" x2="120" y2="305" stroke="rgba(0,229,255,.15)" stroke-width="1"/>
+      <line x1="740" y1="50" x2="740" y2="305" stroke="rgba(0,255,157,.15)" stroke-width="1"/>
+
+      <!-- ── Step 1: ClientHello ── -->
+      <line x1="120" y1="72" x2="730" y2="72" stroke="#00e5ff" stroke-width="1.5" marker-end="url(#hc)"/>
+      <rect x="230" y="58" width="380" height="20" rx="4" fill="rgba(0,229,255,.05)" stroke="rgba(0,229,255,.15)" stroke-width="1"/>
+      <text x="420" y="73" text-anchor="middle" fill="#00e5ff" font-size="10" font-weight="bold">1. ClientHello</text>
+      <text x="120" y="92" fill="#4a6090" font-size="9" text-anchor="middle">TLS version: 1.3</text>
+      <text x="395" y="92" fill="#4a6090" font-size="9" text-anchor="middle">Supported cipher suites + key_share (ephemeral key) + random nonce</text>
+
+      <!-- ── Step 2: ServerHello + Certificate ── -->
+      <line x1="740" y1="128" x2="130" y2="128" stroke="#00ff9d" stroke-width="1.5" marker-end="url(#hs)"/>
+      <rect x="230" y="110" width="380" height="22" rx="4" fill="rgba(0,255,157,.05)" stroke="rgba(0,255,157,.15)" stroke-width="1"/>
+      <text x="420" y="126" text-anchor="middle" fill="#00ff9d" font-size="10" font-weight="bold">2. ServerHello + Certificate + Finished</text>
+      <text x="740" y="148" fill="#4a6090" font-size="9" text-anchor="middle">Chosen cipher</text>
+      <text x="420" y="148" fill="#4a6090" font-size="9" text-anchor="middle">Selected cipher suite + server cert (public key) + verify + encrypted already!</text>
+
+      <!-- Certificate verify box -->
+      <rect x="160" y="156" width="540" height="40" rx="6" fill="rgba(255,184,0,.04)" stroke="rgba(255,184,0,.15)" stroke-width="1"/>
+      <text x="430" y="172" text-anchor="middle" fill="#ffb800" font-size="9">Client verifies: CN=localhost, valid dates, issuer chain</text>
+      <text x="430" y="185" text-anchor="middle" fill="#4a6090" font-size="9">Self-signed → browser shows warning | CA-signed → trusted automatically</text>
+
+      <!-- ── Step 3: Client Finished (already encrypted) ── -->
+      <line x1="120" y1="218" x2="730" y2="218" stroke="#b06cff" stroke-width="1.5" marker-end="url(#hd)"/>
+      <rect x="230" y="204" width="380" height="20" rx="4" fill="rgba(176,108,255,.05)" stroke="rgba(176,108,255,.15)" stroke-width="1"/>
+      <text x="420" y="219" text-anchor="middle" fill="#b06cff" font-size="10" font-weight="bold">3. Client Finished (first encrypted message)</text>
+      <text x="420" y="236" text-anchor="middle" fill="#4a6090" font-size="9">Both sides now have shared secret → derive session keys</text>
+
+      <!-- ── Step 4: Application Data ── -->
+      <line x1="120" y1="264" x2="730" y2="264" stroke="#00e5ff" stroke-width="2" marker-end="url(#hc)"/>
+      <line x1="730" y1="284" x2="120" y2="284" stroke="#00ff9d" stroke-width="2" marker-end="url(#hs)"/>
+      <rect x="230" y="250" width="380" height="40" rx="6" fill="rgba(0,229,255,.06)" stroke="rgba(0,229,255,.2)" stroke-width="1"/>
+      <text x="420" y="266" text-anchor="middle" fill="#00e5ff" font-size="10" font-weight="bold">4. Application Data (HTTP over TLS)</text>
+      <text x="420" y="282" text-anchor="middle" fill="#4a6090" font-size="9">GET /index.php → encrypted with AES-256-GCM session key</text>
+
+      <!-- Key derivation note -->
+      <rect x="10" y="200" width="50" height="50" rx="6" fill="rgba(176,108,255,.05)" stroke="rgba(176,108,255,.15)" stroke-width="1"/>
+      <text x="35" y="220" text-anchor="middle" fill="#b06cff" font-size="8">ECDHE</text>
+      <text x="35" y="232" text-anchor="middle" fill="#4a6090" font-size="7">Key</text>
+      <text x="35" y="242" text-anchor="middle" fill="#4a6090" font-size="7">Exchange</text>
+
+      <!-- 1-RTT label -->
+      <rect x="800" y="68" width="50" height="165" rx="6" fill="rgba(0,229,255,.04)" stroke="rgba(0,229,255,.2)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="825" y="145" text-anchor="middle" fill="#00e5ff" font-size="9" transform="rotate(90,825,145)">← 1 RTT →</text>
+    </svg>
+  </div>
+
+  <!-- How cert is generated -->
+  <h3 style="color:#fff;font-size:1.1rem;margin:32px 0 16px;font-family:'Google Sans'">🛠️ สร้าง Self-Signed Certificate</h3>
+
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">ssl/generate-certs.sh</span><span class="fl">bash</span>
+    </div>
+    <pre><span class="cm">#!/bin/bash</span>
+<span class="cm"># ═══════════════════════════════════════════════════════</span>
+<span class="cm"># สร้าง Self-Signed Certificate สำหรับ development/demo</span>
+<span class="cm"># ═══════════════════════════════════════════════════════</span>
+
+<span class="kw">mkdir</span> -p ssl
+
+<span class="cm"># ── สร้าง Private Key + Certificate (x509 self-signed) ─</span>
+<span class="kw">openssl</span> req -x509 \
+  -nodes \              <span class="cm"># ไม่เข้ารหัส private key (no passphrase)</span>
+  -days <span class="num">365</span> \           <span class="cm"># cert อายุ 1 ปี</span>
+  -newkey rsa:<span class="num">2048</span> \   <span class="cm"># RSA 2048-bit key pair</span>
+  -keyout ssl/server.key \   <span class="cm"># private key output</span>
+  -out    ssl/server.crt \   <span class="cm"># certificate output</span>
+  -subj <span class="str">"/C=TH/ST=Bangkok/L=Bangkok/O=DevOps-Demo/CN=localhost"</span> \
+  -addext <span class="str">"subjectAltName=DNS:localhost,IP:127.0.0.1"</span>
+
+<span class="kw">echo</span> <span class="str">"✅ Certificate created:"</span>
+<span class="kw">openssl</span> x509 -in ssl/server.crt -text -noout | grep -E "(Subject:|Not Before|Not After|DNS:)"
+
+<span class="cm"># ── ดูข้อมูล cert ─────────────────────────────────────</span>
+<span class="cm"># openssl x509 -in ssl/server.crt -text -noout</span>
+<span class="cm"># openssl rsa -in ssl/server.key -check</span></pre>
+  </div>
+
+  <!-- What's in the cert -->
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">ดูข้อมูลใน Certificate (openssl output)</span><span class="fl">text</span>
+    </div>
+    <pre><span class="cm"># รัน: openssl x509 -in ssl/server.crt -text -noout</span>
+
+Certificate:
+  Data:
+    <span class="nd">Version:</span>            <span class="nv">3 (0x2)</span>
+    <span class="nd">Serial Number:</span>      <span class="nv">2c:f8:a1:...</span>
+    <span class="nd">Signature Algorithm:</span> <span class="nv">sha256WithRSAEncryption</span>
+    <span class="nd">Issuer:</span>  <span class="nv">C=TH, ST=Bangkok, O=DevOps-Demo, CN=localhost</span>  <span class="cm">← self-signed = issuer เหมือน subject</span>
+    <span class="nd">Validity:</span>
+        <span class="nv">Not Before: Mar  8 00:00:00 2025</span>
+        <span class="nv">Not After : Mar  8 00:00:00 2026</span>  <span class="cm">← expire ใน 365 วัน</span>
+    <span class="nd">Subject:</span> <span class="nv">C=TH, ST=Bangkok, O=DevOps-Demo, CN=localhost</span>
+    <span class="nd">Public Key:</span> <span class="nv">rsaEncryption (2048 bit)</span>
+    <span class="nd">X509v3 Subject Alternative Name:</span>
+        <span class="nv">DNS:localhost, IP Address:127.0.0.1</span>  <span class="cm">← SAN สำคัญมาก browser ใช้ตรวจ</span>
+
+<span class="cm"># Browser จะแสดง "NET::ERR_CERT_AUTHORITY_INVALID"</span>
+<span class="cm"># เพราะ CA (Issuer) ไม่ได้อยู่ใน trusted root store ของ OS</span>
+<span class="cm"># คลิก "Advanced" → "Proceed anyway" เพื่อดำเนินการต่อ</span></pre>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 07: CONFIGS ═══════════════════════════════════════ -->
+<section id="configs">
+<div class="wrap">
+  <div class="stag">07 · Configuration Files</div>
+  <h2>Nginx SSL Configuration</h2>
+  <p class="slead">Config ทั้งหมดสำหรับ nginx-lb (HTTPS:443 + HTTP:80 redirect) และ nginx-rp (HTTPS:8443)</p>
+
+  <!-- nginx-lb with SSL -->
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">nginx-lb/nginx.conf — Load Balancer + SSL Termination</span><span class="fl">nginx</span>
+    </div>
+    <pre><span class="cm"># ═══════════════════════════════════════════════════════════</span>
+<span class="cm"># NGINX LOAD BALANCER with SSL/TLS Termination</span>
+<span class="cm"># Port 443 (HTTPS) → terminate TLS → Port 80 (HTTP) backends</span>
+<span class="cm"># Port 80 → redirect to HTTPS</span>
+<span class="cm"># ═══════════════════════════════════════════════════════════</span>
+
+<span class="nb2">upstream</span> backend {
+    <span class="nd">least_conn</span>;
+    <span class="nd">server</span> <span class="nv">app1:80</span>;
+    <span class="nd">server</span> <span class="nv">app2:80</span>;
+    <span class="nd">server</span> <span class="nv">app3:80</span>;
+    <span class="nd">keepalive</span> <span class="nv">32</span>;
+}
+
+<span class="cm"># ── HTTP → HTTPS redirect ──────────────────────────────────</span>
+<span class="nb2">server</span> {
+    <span class="nd">listen</span>      <span class="nv">80</span>;
+    <span class="nd">server_name</span> <span class="nv">localhost</span>;
+
+    <span class="cm"># Redirect ทุก request ไปยัง HTTPS</span>
+    <span class="nd">return</span> <span class="nv">301 https://$host$request_uri</span>;
+}
+
+<span class="cm"># ── HTTPS Load Balancer ────────────────────────────────────</span>
+<span class="nb2">server</span> {
+    <span class="nd">listen</span>      <span class="nv">443 ssl</span>;        <span class="cm"># รับ HTTPS</span>
+    <span class="nd">server_name</span> <span class="nv">localhost</span>;
+
+    <span class="cm"># ── SSL Certificate ────────────────────────────────────</span>
+    <span class="hl"><span class="nd">ssl_certificate</span>     <span class="nv">/etc/nginx/ssl/server.crt</span>;  <span class="cm"># public cert</span></span>
+    <span class="hl"><span class="nd">ssl_certificate_key</span> <span class="nv">/etc/nginx/ssl/server.key</span>;  <span class="cm"># private key</span></span>
+
+    <span class="cm"># ── TLS Protocol Settings ──────────────────────────────</span>
+    <span class="hl"><span class="nd">ssl_protocols</span>       <span class="nv">TLSv1.2 TLSv1.3</span>;          <span class="cm"># ห้าม TLS 1.0/1.1</span></span>
+    <span class="hl"><span class="nd">ssl_ciphers</span>         <span class="nv">ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:ECDHE-RSA-AES128-GCM-SHA256</span>;</span>
+    <span class="nd">ssl_prefer_server_ciphers</span> <span class="nv">on</span>;
+
+    <span class="cm"># ── SSL Session Cache (เพิ่ม performance) ──────────────</span>
+    <span class="nd">ssl_session_cache</span>   <span class="nv">shared:SSL:10m</span>;  <span class="cm"># 10MB cache</span>
+    <span class="nd">ssl_session_timeout</span> <span class="nv">10m</span>;
+    <span class="nd">ssl_session_tickets</span> <span class="nv">off</span>;             <span class="cm"># disable for perfect forward secrecy</span>
+
+    <span class="cm"># ── HSTS Header (force HTTPS) ──────────────────────────</span>
+    <span class="hl"><span class="nd">add_header</span> <span class="nv">Strict-Transport-Security "max-age=31536000; includeSubDomains" always</span>;</span>
+
+    <span class="cm"># ── Security Headers ───────────────────────────────────</span>
+    <span class="nd">add_header</span> <span class="nv">X-Frame-Options        "SAMEORIGIN" always</span>;
+    <span class="nd">add_header</span> <span class="nv">X-Content-Type-Options  "nosniff" always</span>;
+    <span class="nd">add_header</span> <span class="nv">X-XSS-Protection       "1; mode=block" always</span>;
+
+    <span class="cm"># ── Proxy to Load Balanced Backend ─────────────────────</span>
+    <span class="nb2">location</span> / {
+        <span class="nd">proxy_pass</span>         <span class="nv">http://backend</span>;    <span class="cm"># HTTP ภายใน (ไม่ต้องเข้ารหัสซ้ำ)</span>
+        <span class="nd">proxy_http_version</span> <span class="nv">1.1</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">Connection        ""</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">Host              $host</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Real-IP         $remote_addr</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Forwarded-For   $proxy_add_x_forwarded_for</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Forwarded-Proto $scheme</span>;    <span class="cm"># "https"</span>
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Forwarded-By    nginx-lb</span>;
+    }
+
+    <span class="nb2">location</span> /lb-status { <span class="nd">stub_status</span> <span class="nv">on</span>; <span class="nd">access_log</span> <span class="nv">off</span>; }
+}</pre>
+  </div>
+
+  <!-- nginx-rp with SSL -->
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">nginx-rp/nginx.conf — Reverse Proxy + SSL Termination</span><span class="fl">nginx</span>
+    </div>
+    <pre><span class="cm"># ═══════════════════════════════════════════════════════════</span>
+<span class="cm"># NGINX REVERSE PROXY with SSL/TLS</span>
+<span class="cm"># Port 8443 (HTTPS) → terminate → Port 80 (HTTP) app1</span>
+<span class="cm"># ═══════════════════════════════════════════════════════════</span>
+
+<span class="nb2">server</span> {
+    <span class="nd">listen</span>      <span class="nv">443 ssl</span>;
+    <span class="nd">server_name</span> <span class="nv">localhost</span>;
+
+    <span class="nd">ssl_certificate</span>     <span class="nv">/etc/nginx/ssl/server.crt</span>;
+    <span class="nd">ssl_certificate_key</span> <span class="nv">/etc/nginx/ssl/server.key</span>;
+    <span class="nd">ssl_protocols</span>       <span class="nv">TLSv1.2 TLSv1.3</span>;
+    <span class="nd">ssl_ciphers</span>         <span class="nv">ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES128-GCM-SHA256</span>;
+    <span class="nd">ssl_session_cache</span>   <span class="nv">shared:SSL:5m</span>;
+    <span class="nd">ssl_session_timeout</span> <span class="nv">5m</span>;
+
+    <span class="nd">add_header</span> <span class="nv">Strict-Transport-Security "max-age=31536000" always</span>;
+    <span class="nd">add_header</span> <span class="nv">X-Served-Via             "nginx-rp" always</span>;
+
+    <span class="nb2">location</span> / {
+        <span class="nd">proxy_pass</span>         <span class="nv">http://app1:80</span>;  <span class="cm"># HTTP ภายใน (trusted network)</span>
+        <span class="nd">proxy_http_version</span> <span class="nv">1.1</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">Host              $host</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Real-IP         $remote_addr</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Forwarded-For   $proxy_add_x_forwarded_for</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Forwarded-Proto $scheme</span>;
+        <span class="nd">proxy_set_header</span>   <span class="nv">X-Proxy-By        nginx-rp</span>;
+    }
+
+    <span class="nb2">location</span> /rp-status { <span class="nd">stub_status</span> <span class="nv">on</span>; <span class="nd">access_log</span> <span class="nv">off</span>; }
+}
+
+<span class="cm"># HTTP 8080 → redirect HTTPS 8443</span>
+<span class="nb2">server</span> {
+    <span class="nd">listen</span> <span class="nv">80</span>;
+    <span class="nd">return</span> <span class="nv">301 https://$host:8443$request_uri</span>;
+}</pre>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 08: DOCKER COMPOSE ════════════════════════════════ -->
+<section id="compose">
+<div class="wrap">
+  <div class="stag">08 · Orchestration</div>
+  <h2>Docker Compose — Full Stack</h2>
+  <p class="slead">5 containers: nginx-lb, nginx-rp, app1/2/3 (Nginx+PHP), Redis — ทั้งหมดอยู่ใน network เดียวกัน</p>
+
+  <div class="ftree">
+    <span class="ftd">nginx-advanced/</span><br>
+    &nbsp;&nbsp;├── <span class="ftf">docker-compose.yml</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># 6 containers</span><br>
+    &nbsp;&nbsp;├── <span class="ftn">ssl/</span><br>
+    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;├── <span class="ftn">generate-certs.sh</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># สร้าง cert ด้วย openssl</span><br>
+    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;├── <span class="ftn">server.crt</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># self-signed certificate (สร้างแล้ว)</span><br>
+    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;└── <span class="ftn">server.key</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># private key</span><br>
+    &nbsp;&nbsp;├── <span class="ftd">nginx-lb/</span><br>
+    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;└── <span class="ftf">nginx.conf</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># LB + SSL + HSTS + 80→443 redirect</span><br>
+    &nbsp;&nbsp;├── <span class="ftd">nginx-rp/</span><br>
+    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;└── <span class="ftf">nginx.conf</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># RP + SSL :8443</span><br>
+    &nbsp;&nbsp;└── <span class="ftd">app/</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="ftf">Dockerfile</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># php:8.2-fpm-alpine + nginx + supervisor</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="ftf">nginx.conf</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># Web server → fastcgi</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="ftf">supervisord.conf</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># nginx + php-fpm + redis ext</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="ftd">www/</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── <span class="ftf">index.php</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># หน้าหลัก แสดงชื่อ server</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="ftn">session-demo.php</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="ftc"># ทดสอบ Redis shared session</span>
+  </div>
+
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">docker-compose.yml</span><span class="fl">yaml</span>
+    </div>
+    <pre><span class="cm">version: '3.8'</span>
+
+<span class="yk">services</span>:
+
+  <span class="cm"># ── NGINX Load Balancer + SSL (port 443 + 80→443 redirect) ───</span>
+  <span class="yk">nginx-lb</span>:
+    <span class="yk">image</span>: <span class="yv">nginx:alpine</span>
+    <span class="yk">container_name</span>: <span class="yv">nginx-lb</span>
+    <span class="yk">ports</span>:
+      - <span class="yv">"80:80"</span>    <span class="cm"># HTTP → redirect to HTTPS</span>
+      - <span class="yv">"443:443"</span>  <span class="cm"># HTTPS (SSL termination here)</span>
+    <span class="yk">volumes</span>:
+      - <span class="yv">./nginx-lb/nginx.conf:/etc/nginx/conf.d/default.conf:ro</span>
+      - <span class="yv">./ssl:/etc/nginx/ssl:ro</span>   <span class="cm"># mount SSL certificates</span>
+    <span class="yk">depends_on</span>: [<span class="yv">app1, app2, app3</span>]
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+  <span class="cm"># ── NGINX Reverse Proxy + SSL (port 8443 + 8080→8443) ────────</span>
+  <span class="yk">nginx-rp</span>:
+    <span class="yk">image</span>: <span class="yv">nginx:alpine</span>
+    <span class="yk">container_name</span>: <span class="yv">nginx-rp</span>
+    <span class="yk">ports</span>:
+      - <span class="yv">"8080:80"</span>   <span class="cm"># HTTP redirect</span>
+      - <span class="yv">"8443:443"</span>  <span class="cm"># HTTPS reverse proxy</span>
+    <span class="yk">volumes</span>:
+      - <span class="yv">./nginx-rp/nginx.conf:/etc/nginx/conf.d/default.conf:ro</span>
+      - <span class="yv">./ssl:/etc/nginx/ssl:ro</span>
+    <span class="yk">depends_on</span>: [<span class="yv">app1</span>]
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+  <span class="cm"># ── Redis (Shared Session Store) ──────────────────────────────</span>
+  <span class="yk">redis</span>:
+    <span class="yk">image</span>: <span class="yv">redis:7-alpine</span>
+    <span class="yk">container_name</span>: <span class="yv">redis-sessions</span>
+    <span class="yk">command</span>: <span class="yv">redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru</span>
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+  <span class="cm"># ── PHP App Servers (x3) ──────────────────────────────────────</span>
+  <span class="yk">app1</span>:
+    <span class="yk">build</span>: <span class="yv">./app</span>
+    <span class="yk">container_name</span>: <span class="yv">app-server-1</span>
+    <span class="yk">environment</span>:
+      - <span class="yv">SERVER_NAME=Web Server 1</span>
+      - <span class="yv">SERVER_COLOR=#22d3a5</span>
+      - <span class="yv">SERVER_EMOJI=🟢</span>
+      - <span class="yv">REDIS_HOST=redis</span>
+    <span class="yk">depends_on</span>: [<span class="yv">redis</span>]
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+  <span class="yk">app2</span>:
+    <span class="yk">build</span>: <span class="yv">./app</span>
+    <span class="yk">container_name</span>: <span class="yv">app-server-2</span>
+    <span class="yk">environment</span>:
+      - <span class="yv">SERVER_NAME=Web Server 2</span>
+      - <span class="yv">SERVER_COLOR=#00d4ff</span>
+      - <span class="yv">SERVER_EMOJI=🔵</span>
+      - <span class="yv">REDIS_HOST=redis</span>
+    <span class="yk">depends_on</span>: [<span class="yv">redis</span>]
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+  <span class="yk">app3</span>:
+    <span class="yk">build</span>: <span class="yv">./app</span>
+    <span class="yk">container_name</span>: <span class="yv">app-server-3</span>
+    <span class="yk">environment</span>:
+      - <span class="yv">SERVER_NAME=Web Server 3</span>
+      - <span class="yv">SERVER_COLOR=#ffd700</span>
+      - <span class="yv">SERVER_EMOJI=🟡</span>
+      - <span class="yv">REDIS_HOST=redis</span>
+    <span class="yk">depends_on</span>: [<span class="yv">redis</span>]
+    <span class="yk">networks</span>: [<span class="yv">webnet</span>]
+
+<span class="yk">networks</span>:
+  <span class="yk">webnet</span>:
+    <span class="yk">driver</span>: <span class="yv">bridge</span></pre>
+  </div>
+
+  <!-- Dockerfile with redis extension -->
+  <div class="cw">
+    <div class="cb">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span class="fn">app/Dockerfile — PHP + Redis extension + Nginx + Supervisor</span><span class="fl">dockerfile</span>
+    </div>
+    <pre><span class="kw">FROM</span> <span class="nv">php:8.2-fpm-alpine</span>
+
+<span class="cm"># ── ติดตั้ง dependencies ──────────────────────────────────</span>
+<span class="kw">RUN</span> apk add --no-cache nginx supervisor autoconf gcc g++ make \
+ && pecl install redis \          <span class="cm"># PHP Redis extension</span>
+ && docker-php-ext-enable redis \ <span class="cm"># enable extension</span>
+ && apk del autoconf gcc g++ make <span class="cm"># clean up build tools</span>
+
+<span class="cm"># ── Nginx web server config ───────────────────────────────</span>
+<span class="kw">COPY</span> nginx.conf /etc/nginx/http.d/default.conf
+
+<span class="cm"># ── Supervisor config ─────────────────────────────────────</span>
+<span class="kw">COPY</span> supervisord.conf /etc/supervisord.conf
+
+<span class="cm"># ── PHP app files ─────────────────────────────────────────</span>
+<span class="kw">COPY</span> www/ /var/www/html/
+
+<span class="kw">RUN</span> chown -R www-data:www-data /var/www/html \
+ && mkdir -p /run/nginx /var/log/supervisor
+
+<span class="kw">EXPOSE</span> <span class="num">80</span>
+<span class="kw">CMD</span> [<span class="str">"/usr/bin/supervisord"</span>, <span class="str">"-c"</span>, <span class="str">"/etc/supervisord.conf"</span>]</pre>
+  </div>
+</div>
+</section>
+
+<!-- ═══ 09: RUN & TEST ════════════════════════════════════ -->
+<section id="run">
+<div class="wrap">
+  <div class="stag">09 · Run &amp; Test</div>
+  <h2>วิธีรัน &amp; ทดสอบครบทุก Feature</h2>
+
+  <div class="term">
+    <div class="tbar">
+      <div class="dots2"><div class="d2 dr2"></div><div class="d2 dy2"></div><div class="d2 dg2b"></div></div>
+      <span style="font-family:'Google Sans';font-size:11px;color:var(--dim)">Terminal — Quick Start</span>
+    </div>
+    <div class="tbody">
+
+      <div><span class="t$">$ </span><span class="tc">cd nginx-advanced</span></div>
+      <div style="color:var(--dim);margin-top:8px"># ── Step 1: สร้าง SSL certificate ────────────────────────</div>
+      <div><span class="t$">$ </span><span class="tc">bash ssl/generate-certs.sh</span></div>
+      <div class="to"> ✅ Certificate created: CN=localhost, SAN=localhost,127.0.0.1</div>
+
+      <div style="color:var(--dim);margin-top:12px"># ── Step 2: Build &amp; Start ──────────────────────────────────</div>
+      <div><span class="t$">$ </span><span class="tc">docker compose up --build -d</span></div>
+      <div class="to"> ✔ redis-sessions    Started</div>
+      <div class="to"> ✔ app-server-1      Started</div>
+      <div class="to"> ✔ app-server-2      Started</div>
+      <div class="to"> ✔ app-server-3      Started</div>
+      <div class="to"> ✔ nginx-lb          Started</div>
+      <div class="to"> ✔ nginx-rp          Started</div>
+
+      <div style="color:var(--gold);margin-top:16px"># ════ TEST 1: HTTPS Load Balancer ══════════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">curl -sk https://localhost | grep -o 'Web Server [0-9]'</span></div>
+      <div class="to">Web Server 2 &nbsp;<span class="to"># -k = skip cert verify (self-signed)</span></div>
+      <div><span class="t$">$ </span><span class="tc">for i in {1..6}; do curl -sk https://localhost | grep -o 'Web Server [0-9]'; done</span></div>
+      <div class="to">Web Server 1 → 2 → 3 → 1 → 2 → 3 &nbsp;<span class="to"># least_conn</span></div>
+
+      <div style="color:var(--cyan);margin-top:16px"># ════ TEST 2: HTTP → HTTPS Redirect ════════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">curl -I http://localhost</span></div>
+      <div class="to">HTTP/1.1 301 Moved Permanently</div>
+      <div class="to">Location: <span class="tu">https://localhost/</span> &nbsp;<span class="to"># ✓ redirect!</span></div>
+
+      <div style="color:var(--cyan);margin-top:12px"># ════ TEST 3: HTTPS Reverse Proxy ══════════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">curl -skI https://localhost:8443 | grep -E "(X-Served|Server)"</span></div>
+      <div class="to">X-Served-Via: nginx-rp &nbsp;<span class="to"># ✓ เห็น header จาก RP</span></div>
+
+      <div style="color:var(--green);margin-top:16px"># ════ TEST 4: Redis Shared Session ════════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">curl -sk -c /tmp/cookie.txt https://localhost/session-demo.php | grep -o 'Visit #[0-9]*'</span></div>
+      <div class="to">Visit #1</div>
+      <div><span class="t$">$ </span><span class="tc">for i in {1..5}; do curl -sk -b /tmp/cookie.txt -c /tmp/cookie.txt https://localhost/session-demo.php | grep -o 'Visit #[0-9]*'; done</span></div>
+      <div class="to">Visit #2 &nbsp;<span class="to"># session count ต้องเพิ่มต่อเนื่อง</span></div>
+      <div class="to">Visit #3 &nbsp;<span class="to"># แม้ request ไปต่าง server</span></div>
+      <div class="to">Visit #4</div>
+      <div class="to">Visit #5</div>
+      <div class="to">Visit #6 &nbsp;<span class="to"># ✓ Redis shared session ทำงาน!</span></div>
+
+      <div style="color:var(--violet);margin-top:16px"># ════ TEST 5: ดู SSL Certificate Info ════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">echo | openssl s_client -connect localhost:443 2>/dev/null | openssl x509 -noout -subject -dates</span></div>
+      <div class="to">subject=C=TH, ST=Bangkok, O=DevOps-Demo, CN=localhost</div>
+      <div class="to">notBefore=Mar  8 00:00:00 2025</div>
+      <div class="to">notAfter=Mar  8 00:00:00 2026</div>
+
+      <div style="color:var(--gold);margin-top:16px"># ════ TEST 6: Redis session data ════════════════════════</div>
+      <div><span class="t$">$ </span><span class="tc">docker compose exec redis redis-cli KEYS "PHPREDIS_SESSION:*"</span></div>
+      <div class="to">1) "PHPREDIS_SESSION:abc123xyz789"</div>
+      <div><span class="t$">$ </span><span class="tc">docker compose exec redis redis-cli GET "PHPREDIS_SESSION:abc123xyz789"</span></div>
+      <div class="to">visit_count|i:6;first_server|s:12:"Web Server 1";...</div>
+
+      <div style="color:var(--dim);margin-top:16px"># ── Open in browser ─────────────────────────────────────</div>
+      <div style="color:var(--cyan)">🔒 HTTPS LB:  <span class="tu">https://localhost</span> <span class="to">(F5 = server เปลี่ยน)</span></div>
+      <div style="color:var(--gold);margin-top:4px">🔄 HTTPS RP:  <span class="tu">https://localhost:8443</span> <span class="to">(F5 = app1 เสมอ)</span></div>
+      <div style="color:var(--green);margin-top:4px">🗄️ Session:   <span class="tu">https://localhost/session-demo.php</span> <span class="to">(count เพิ่มต่อเนื่อง)</span></div>
+    </div>
+  </div>
+
+  <div class="box bx-y">
+    <strong>⚠ Browser Warning สำหรับ Self-Signed Cert:</strong><br>
+    Chrome/Firefox จะแสดง "Your connection is not private" → คลิก <strong>Advanced</strong> → <strong>Proceed to localhost</strong><br>
+    หรือใช้ <code>curl -k</code> เพื่อ skip certificate verification ใน testing
+  </div>
+</div>
+</section>
+
+<!-- ═══ 10: MUST KNOW ══════════════════════════════════════ -->
+<section id="mustknow">
+<div class="wrap">
+  <div class="stag">10 · Production Knowledge</div>
+  <h2>สิ่งที่ควรรู้ในงานจริง</h2>
+  <p class="slead">แนวคิดและเทคนิคที่ใช้จริงใน production ที่ทุก DevOps/Backend engineer ควรเข้าใจ</p>
+
+  <div class="know-grid">
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🚦</div><div class="kc-title">Rate Limiting</div></div>
+      <div class="kc-body">
+        จำกัดจำนวน request จาก IP เดียวกันต่อวินาที ป้องกัน DDoS และ brute-force
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="cm"># Nginx rate limiting</span>
+<span class="nd">limit_req_zone</span> <span class="nv">$binary_remote_addr zone=api:10m rate=10r/s</span>;
+
+<span class="nb2">location</span> /api/ {
+    <span class="nd">limit_req</span> <span class="nv">zone=api burst=20 nodelay</span>;
+    <span class="nd">proxy_pass</span> <span class="nv">http://backend</span>;
+}</pre>
+        </div>
+        <code>10r/s</code> = 10 requests/sec, <code>burst=20</code> อนุญาต spike สั้นๆ
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">💊</div><div class="kc-title">Health Check</div></div>
+      <div class="kc-body">
+        Nginx ควร ping backend เป็นระยะ ถ้าล้มให้หยุดส่ง traffic ไป (passive health check ใน Nginx OSS)
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nb2">upstream</span> backend {
+    <span class="nd">server</span> <span class="nv">app1:80 max_fails=3 fail_timeout=30s</span>;
+    <span class="nd">server</span> <span class="nv">app2:80 max_fails=3 fail_timeout=30s</span>;
+    <span class="cm"># ถ้า fail 3 ครั้งใน 30s → marked down</span>
+    <span class="cm"># หลัง 30s ลอง probe ใหม่อัตโนมัติ</span>
+}</pre>
+        </div>
+        Active health check ต้องการ <strong>Nginx Plus</strong> หรือใช้ third-party module
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">📋</div><div class="kc-title">HSTS (HTTP Strict Transport Security)</div></div>
+      <div class="kc-body">
+        บอก browser ว่า "ห้าม HTTP ใช้ได้แค่ HTTPS เท่านั้น" บันทึกไว้ในช่วงเวลาที่กำหนด
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nd">add_header</span> <span class="nv">Strict-Transport-Security</span>
+  <span class="str">"max-age=31536000; includeSubDomains; preload"</span>
+  <span class="nv">always</span>;
+<span class="cm"># max-age=31536000 = 1 ปี</span>
+<span class="cm"># preload = ขอเข้า Chrome HSTS preload list</span></pre>
+        </div>
+        ⚠ ระวัง: เมื่อเพิ่มแล้วถอดยาก! Test ด้วย <code>max-age=300</code> ก่อน
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">⚡</div><div class="kc-title">Keepalive &amp; Connection Reuse</div></div>
+      <div class="kc-body">
+        การเปิด TCP connection ใหม่ทุก request มี overhead สูง Keepalive ให้ใช้ connection เดิมซ้ำ
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nb2">upstream</span> backend {
+    <span class="nd">keepalive</span> <span class="nv">32</span>; <span class="cm"># pool 32 connections</span>
+}
+<span class="nb2">location</span> / {
+    <span class="nd">proxy_http_version</span> <span class="nv">1.1</span>;
+    <span class="nd">proxy_set_header</span>   <span class="nv">Connection ""</span>;
+    <span class="cm"># สำคัญมาก! ลบ Connection: close header</span>
+}</pre>
+        </div>
+        ลด latency ได้ 20-50% ในบาง workload
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🔏</div><div class="kc-title">Perfect Forward Secrecy (PFS)</div></div>
+      <div class="kc-body">
+        ถ้า private key รั่วในอนาคต traffic ในอดีตก็ยังถอดรหัสไม่ได้ ใช้ ephemeral key (ECDHE) ทุก session
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="cm"># Ciphers ที่รองรับ PFS</span>
+<span class="nd">ssl_ciphers</span> <span class="nv">ECDHE-RSA-AES256-GCM-SHA384</span>
+           <span class="nv">:ECDHE-RSA-CHACHA20-POLY1305</span>
+           <span class="nv">:ECDHE-RSA-AES128-GCM-SHA256</span>;
+<span class="nd">ssl_session_tickets</span> <span class="nv">off</span>; <span class="cm"># ต้อง off เพื่อ PFS</span></pre>
+        </div>
+        <code>ECDHE</code> = Elliptic Curve Diffie-Hellman Ephemeral
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">📦</div><div class="kc-title">Gzip Compression</div></div>
+      <div class="kc-body">
+        บีบอัด HTTP response ก่อนส่ง ลด bandwidth 60-80% สำหรับ text content (HTML, JSON, CSS)
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nd">gzip</span>              <span class="nv">on</span>;
+<span class="nd">gzip_vary</span>         <span class="nv">on</span>;
+<span class="nd">gzip_proxied</span>      <span class="nv">any</span>;
+<span class="nd">gzip_comp_level</span>   <span class="nv">6</span>;   <span class="cm"># 1-9, balance speed/ratio</span>
+<span class="nd">gzip_types</span>        <span class="nv">text/plain text/css application/json
+                   application/javascript text/xml</span>;</pre>
+        </div>
+        ⚠ อย่าใช้กับ binary (images, videos) — ไม่ช่วยอะไร
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🗂️</div><div class="kc-title">Nginx Caching</div></div>
+      <div class="kc-body">
+        Cache response จาก backend ลด load บน app servers สำหรับ content ที่ไม่เปลี่ยนบ่อย
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nd">proxy_cache_path</span> <span class="nv">/tmp/nginx_cache levels=1:2
+    keys_zone=my_cache:10m max_size=1g inactive=60m</span>;
+
+<span class="nb2">location</span> /api/static/ {
+    <span class="nd">proxy_cache</span>            <span class="nv">my_cache</span>;
+    <span class="nd">proxy_cache_valid</span>      <span class="nv">200 1h</span>;  <span class="cm"># cache 200 responses 1hr</span>
+    <span class="nd">proxy_cache_use_stale</span>  <span class="nv">error timeout</span>;
+    <span class="nd">add_header</span>             <span class="nv">X-Cache-Status $upstream_cache_status</span>;
+}</pre>
+        </div>
+        Header <code>X-Cache-Status: HIT/MISS</code> บอกว่า served จาก cache หรือ origin
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🏥</div><div class="kc-title">Graceful Reload vs Restart</div></div>
+      <div class="kc-body">
+        อัพเดท Nginx config โดยไม่ drop connection ที่กำลัง active อยู่
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="cm"># ✓ Graceful reload — ไม่ drop connections</span>
+$ nginx -t  <span class="cm"># test config ก่อน</span>
+$ nginx -s reload
+
+<span class="cm"># ✗ Restart — drop active connections</span>
+$ systemctl restart nginx
+
+<span class="cm"># ใน Docker:</span>
+$ docker exec nginx-lb nginx -t
+$ docker exec nginx-lb nginx -s reload</pre>
+        </div>
+        Zero-downtime config update — สำคัญมากสำหรับ production
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">📊</div><div class="kc-title">Access Log Format &amp; Analysis</div></div>
+      <div class="kc-body">
+        Custom log format เก็บข้อมูลครบสำหรับ debugging และ monitoring
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nd">log_format</span> <span class="nv">detailed</span>
+  <span class="str">'$remote_addr [$time_local] "$request" $status'</span>
+  <span class="str">' $body_bytes_sent $request_time'</span>
+  <span class="str">' "$http_x_forwarded_for"'</span>
+  <span class="str">' upstream=$upstream_addr'</span>;  <span class="cm"># สำคัญ! รู้ว่าไปหา server ไหน</span>
+
+<span class="nd">access_log</span> <span class="nv">/var/log/nginx/access.log detailed</span>;</pre>
+        </div>
+        <code>$upstream_addr</code> = IP:port ของ backend ที่ serve request จริงๆ
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🔄</div><div class="kc-title">WebSocket Proxying</div></div>
+      <div class="kc-body">
+        WebSocket ต้องการ config พิเศษเพราะ upgrade จาก HTTP protocol
+        <div class="cw" style="margin-top:10px">
+          <pre style="font-size:11px;padding:10px 14px"><span class="nb2">location</span> /ws/ {
+    <span class="nd">proxy_pass</span>         <span class="nv">http://backend</span>;
+    <span class="nd">proxy_http_version</span> <span class="nv">1.1</span>;
+    <span class="cm"># สำคัญสำหรับ WebSocket upgrade!</span>
+    <span class="nd">proxy_set_header</span>   <span class="nv">Upgrade    $http_upgrade</span>;
+    <span class="nd">proxy_set_header</span>   <span class="nv">Connection "upgrade"</span>;
+    <span class="nd">proxy_read_timeout</span> <span class="nv">3600s</span>; <span class="cm"># long-lived connection</span>
+}</pre>
+        </div>
+        ⚠ WebSocket = stateful connection → ต้องระวัง LB algorithm (ใช้ ip_hash)
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🌐</div><div class="kc-title">OSI Model &amp; TCP/IP</div></div>
+      <div class="kc-body">
+        Nginx ทำงานที่ Layer 7 (Application) ดู HTTP content ได้ ต่างจาก L4 LB (TCP level)
+        <br><br>
+        <strong style="color:#fff">L4 Load Balancer</strong> (HAProxy, AWS NLB): ดู IP+Port เท่านั้น ไม่เปิด HTTP packet เร็วกว่า
+        <br><br>
+        <strong style="color:#fff">L7 Load Balancer</strong> (Nginx, AWS ALB): ดู HTTP headers, path, cookies ทำ content-based routing ได้
+        <br><br>
+        <code>Nginx upstream</code> ทำงานที่ L7 = รู้ URL path, ทำ sticky session ตาม cookie ได้
+      </div>
+    </div>
+
+    <div class="know-card">
+      <div class="kc-head"><div class="kc-icon">🔑</div><div class="kc-title">JWT vs Session — เลือกอย่างไร?</div></div>
+      <div class="kc-body">
+        <strong style="color:var(--green)">ใช้ JWT เมื่อ:</strong> Microservices, Mobile API, Third-party integrations, ไม่ต้องการ revoke token ทันที
+        <br><br>
+        <strong style="color:var(--cyan)">ใช้ Session + Redis เมื่อ:</strong> Web app ที่ต้องการ logout ทันที, เก็บ sensitive data ฝั่ง server, Traditional monolith
+        <br><br>
+        <strong style="color:var(--gold)">ข้อควรระวัง JWT:</strong> ถ้า token ถูกขโมยก่อน expire ห้ามใช้ไม่ได้ (ต้องใช้ refresh token + blacklist)
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Final Architecture Summary -->
+  <div class="box bx-c" style="margin-top:40px">
+    <strong>🎯 สรุป Architecture Pattern ที่ดีสำหรับ Production:</strong><br><br>
+    <div class="flow-row">
+      <span class="flow-pill" style="border-color:rgba(0,229,255,.3);color:var(--cyan)">🌐 User</span>
+      <span class="flow-arr">→</span>
+      <span class="flow-pill" style="border-color:rgba(0,229,255,.3);color:var(--cyan)">CDN/WAF (CloudFlare)</span>
+      <span class="flow-arr">→</span>
+      <span class="flow-pill" style="border-color:rgba(255,184,0,.3);color:var(--gold)">Nginx LB + SSL Term :443</span>
+      <span class="flow-arr">→</span>
+      <span class="flow-pill" style="border-color:rgba(0,255,157,.3);color:var(--green)">App1 / App2 / App3</span>
+      <span class="flow-arr">→</span>
+      <span class="flow-pill" style="border-color:rgba(255,61,107,.3);color:var(--red)">Redis Sessions</span>
+      <span class="flow-arr">+</span>
+      <span class="flow-pill" style="border-color:rgba(176,108,255,.3);color:var(--violet)">PostgreSQL/MySQL</span>
+    </div>
+    <br>
+    <strong>Key decisions:</strong> SSL terminate ที่ LB · Session เก็บใน Redis · App servers เป็น stateless · 
+    ใช้ least_conn algorithm · กำหนด max_fails สำหรับ auto-failover · เปิด HSTS · Rate limit ที่ LB
+  </div>
+</div>
+</section>
+
+<!-- ═══ FOOTER ════════════════════════════════════════════ -->
+<footer style="padding:44px 0;text-align:center;border-top:1px solid var(--line)">
+  <div class="wrap">
+    <div style="font-family:'Google Sans';font-size:1.1rem;color:#009639;font-weight:700;margin-bottom:10px">nginx</div>
+    <p style="color:var(--dim);font-size:.875rem">
+      Stateful · Stateless · SSL/TLS · Redis Sessions · Load Balancer · Reverse Proxy · PHP-FPM
+    </p>
+    <p style="font-family:'Google Sans';font-size:10px;color:var(--faint);margin-top:6px">
+      TLS 1.3 · ECDHE · AES-256-GCM · HSTS · Rate Limiting · Health Check · Keepalive · Gzip
+    </p>
+  </div>
+</footer>
+
+<script>
+function goTo(id){
+  document.getElementById(id).scrollIntoView({behavior:'smooth'});
+  document.querySelectorAll('.nb').forEach(b=>b.classList.remove('on'));
+  event.target.classList.add('on');
+}
+const secs=[...document.querySelectorAll('section')];
+const btns=[...document.querySelectorAll('.nb')];
+secs.forEach(s=>new IntersectionObserver(e=>{
+  if(e[0].isIntersecting){
+    const i=secs.indexOf(e[0].target);
+    btns.forEach(b=>b.classList.remove('on'));
+    btns[i]?.classList.add('on');
+  }
+},{threshold:0.25}).observe(s));
+</script>
+</body>
+</html>
