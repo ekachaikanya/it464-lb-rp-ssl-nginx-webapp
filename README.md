@@ -38,9 +38,11 @@ nginx-advanced/
 
 ```bash
 # (Optional) Regenerate SSL cert
-bash ssl/generate-certs.sh
+bash cd ssl
+bash generate-certs.sh
 
 # Build & Start
+cd ..
 docker compose up --build -d
 ```
 
